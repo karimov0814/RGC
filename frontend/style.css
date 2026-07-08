@@ -46,33 +46,6 @@ html, body {
 .header h1 { font-size: 22px; font-weight: 700; margin: 0 0 4px; letter-spacing: -0.01em; }
 .subtitle { color: var(--hint); font-size: 14px; margin: 0; }
 
-/* ---------- Rol tanlash ---------- */
-.role-options {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-top: 8px;
-}
-.role-card {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 18px;
-  border-radius: var(--radius);
-  border: 1px solid rgba(139,141,151,0.18);
-  background: var(--secondary-bg);
-  color: var(--text);
-  font-size: 16px;
-  font-weight: 600;
-  text-align: left;
-  cursor: pointer;
-  transition: transform .12s ease, border-color .12s ease;
-}
-.role-card:active { transform: scale(0.98); border-color: var(--button); }
-.role-icon { font-size: 26px; }
-
-/* ---------- Kontakt ---------- */
-.contact-box { display: flex; flex-direction: column; align-items: center; gap: 14px; margin-top: 40px; }
 .hint { color: var(--hint); font-size: 13px; text-align: center; margin: 0; }
 
 /* ---------- Filial ro'yxati ---------- */
