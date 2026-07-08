@@ -3,6 +3,21 @@
 -- ============================================================
 
 -- ============================================================
+--  Bir martalik migratsiyalarni kuzatish uchun jadval.
+--  MUHIM: schema.sql backend har ishga tushganda (Railway restart/deploy)
+--  to'liq qayta bajariladi. Agar quyidagi "bo'lim/filiallarni qattiq
+--  ro'yxat bilan cheklash" migratsiyalari HAR safar ishlab tursa, u holda
+--  admin panel orqali qilingan har qanday o'zgarish (yangi filial qo'shish,
+--  filial o'chirish/tahrirlash) keyingi restart'da bekor qilinib qo'yardi.
+--  Shu sabab bunday migratsiyalar shu jadval yordamida FAQAT BIR MARTA
+--  ishlaydi.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS schema_migrations (
+    id          TEXT PRIMARY KEY,
+    applied_at  TIMESTAMP NOT NULL DEFAULT now()
+);
+
+-- ============================================================
 --  Ruxsat etilgan foydalanuvchilar (whitelist)
 --  Faqat shu jadvalda mavjud telegram_user_id lar mini app'dan
 --  foydalana oladi. is_superadmin = TRUE bo'lganlar admin panelga
@@ -65,8 +80,9 @@ ALTER TABLE submissions DROP COLUMN IF EXISTS phone;
 DROP TABLE IF EXISTS user_contacts;
 
 -- ============================================================
---  Bo'limlarni FAQAT quyidagi ro'yxat bilan cheklash
---  (idempotent migratsiya — har ishga tushishda xavfsiz qayta bajariladi)
+--  Bo'limlar: takroriy nomlarni bir martalik tozalash + UNIQUE indeks
+--  (bu qism har safar xavfsiz qayta ishlashi mumkin — faqat takrorlarni
+--  birlashtiradi, mavjud is_active holatini o'zgartirmaydi)
 -- ============================================================
 
 -- 1) Avval `name` ustida UNIQUE cheklov bo'lmagani uchun, oldingi
@@ -98,68 +114,85 @@ WHERE s.id = ranked.id AND ranked.rn > 1;
 --    takroriy qator qo'shilmasligi uchun)
 CREATE UNIQUE INDEX IF NOT EXISTS sections_name_unique ON sections(name);
 
--- 3) Ro'yxatda YO'Q bo'lgan har qanday eski bo'lim (masalan avvalgi
---    namunaviy "Oshxona", "Zal" va h.k.) faolsizlantiriladi — o'chirilmaydi,
---    chunki unga bog'liq eski hisobotlar bo'lishi mumkin, lekin ilovada
---    endi ko'rinmaydi.
-UPDATE sections SET is_active = FALSE
-WHERE name NOT IN (
-    'Фото внешней территории и фасада',
-    'Фото зала и туалетов',
-    'Фото прилавка',
-    'Фото кухни (1. Станция пиццы, 2. Станция Вок, 3. Станция сборки бургеров и роллов, 4. Панировочная станция, 5. Станция фри, 6. Станция мойки и моповые зоны)',
-    'Фото служебного помещения',
-    'Фото доставочных помещений',
-    'Фото сотрудников после пятиминутки и командной доски (только утром)',
-    'Фото чек-листов: Чек-лист Чистоты, Чек-лист МС, КЛН, Бланк уборки ГСУ (11:00, 15:00, 18:00, 21:00, Закрытие смены)'
-);
+-- ============================================================
+--  Bo'limlarni boshlang'ich 8 ta ro'yxat bilan to'ldirish
+--  — FAQAT BIR MARTA ishlaydi (schema_migrations orqali qulflangan),
+--  shunda keyinchalik bazada qilingan har qanday o'zgarish (masalan,
+--  kelajakda bo'limlar uchun ham admin panel qo'shilsa) restart'da
+--  bekor qilinmaydi.
+-- ============================================================
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM schema_migrations WHERE id = 'seed_sections_v1') THEN
+        UPDATE sections SET is_active = FALSE
+        WHERE name NOT IN (
+            'Фото внешней территории и фасада',
+            'Фото зала и туалетов',
+            'Фото прилавка',
+            'Фото кухни (1. Станция пиццы, 2. Станция Вок, 3. Станция сборки бургеров и роллов, 4. Панировочная станция, 5. Станция фри, 6. Станция мойки и моповые зоны)',
+            'Фото служебного помещения',
+            'Фото доставочных помещений',
+            'Фото сотрудников после пятиминутки и командной доски (только утром)',
+            'Фото чек-листов: Чек-лист Чистоты, Чек-лист МС, КЛН, Бланк уборки ГСУ (11:00, 15:00, 18:00, 21:00, Закрытие смены)'
+        );
 
--- 4) Faqat kerakli 8 ta bo'lim mavjud va faol bo'lishini ta'minlaymiz
-INSERT INTO sections (name, sort_order, is_active) VALUES
-    ('Фото внешней территории и фасада', 1, TRUE),
-    ('Фото зала и туалетов', 2, TRUE),
-    ('Фото прилавка', 3, TRUE),
-    ('Фото кухни (1. Станция пиццы, 2. Станция Вок, 3. Станция сборки бургеров и роллов, 4. Панировочная станция, 5. Станция фри, 6. Станция мойки и моповые зоны)', 4, TRUE),
-    ('Фото служебного помещения', 5, TRUE),
-    ('Фото доставочных помещений', 6, TRUE),
-    ('Фото сотрудников после пятиминутки и командной доски (только утром)', 7, TRUE),
-    ('Фото чек-листов: Чек-лист Чистоты, Чек-лист МС, КЛН, Бланк уборки ГСУ (11:00, 15:00, 18:00, 21:00, Закрытие смены)', 8, TRUE)
-ON CONFLICT (name) DO UPDATE SET sort_order = EXCLUDED.sort_order, is_active = TRUE;
+        INSERT INTO sections (name, sort_order, is_active) VALUES
+            ('Фото внешней территории и фасада', 1, TRUE),
+            ('Фото зала и туалетов', 2, TRUE),
+            ('Фото прилавка', 3, TRUE),
+            ('Фото кухни (1. Станция пиццы, 2. Станция Вок, 3. Станция сборки бургеров и роллов, 4. Панировочная станция, 5. Станция фри, 6. Станция мойки и моповые зоны)', 4, TRUE),
+            ('Фото служебного помещения', 5, TRUE),
+            ('Фото доставочных помещений', 6, TRUE),
+            ('Фото сотрудников после пятиминутки и командной доски (только утром)', 7, TRUE),
+            ('Фото чек-листов: Чек-лист Чистоты, Чек-лист МС, КЛН, Бланк уборки ГСУ (11:00, 15:00, 18:00, 21:00, Закрытие смены)', 8, TRUE)
+        ON CONFLICT (name) DO UPDATE SET sort_order = EXCLUDED.sort_order, is_active = TRUE;
+
+        INSERT INTO schema_migrations (id) VALUES ('seed_sections_v1');
+    END IF;
+END $$;
 
 -- ============================================================
---  Filiallarni FAQAT quyidagi ro'yxat bilan cheklash
---  (idempotent migratsiya — har ishga tushishda xavfsiz qayta bajariladi)
+--  Filiallarni boshlang'ich 17 ta ro'yxat bilan to'ldirish
+--  — FAQAT BIR MARTA ishlaydi (schema_migrations orqali qulflangan).
+--  Aynan shu joy avvalgi bug'ning manbai edi: bu bloklar himoyasiz
+--  holda HAR safar ishga tushganda qayta bajarilardi va natijada
+--  superadmin admin panel orqali o'chirgan (faolsizlantirgan) yoki
+--  qo'shgan filiallar keyingi backend restart'ida avtomatik bekor
+--  qilinib qo'yardi ("o'chirish to'liq ishlamayapti" muammosi shundan
+--  edi). Endi bu migratsiya faqat bazada birinchi marta ishga
+--  tushganda amalga oshadi, keyinchalik admin panel orqali qilingan
+--  o'zgarishlarga tegilmaydi.
 -- ============================================================
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM schema_migrations WHERE id = 'seed_filials_v1') THEN
+        UPDATE filials SET is_active = FALSE
+        WHERE name NOT IN (
+            'Scopus Mall', 'City Mall', 'Alfraganus', 'Beruniy', 'Novza', 'Anhor',
+            'Sergeli', 'Tuzel', 'Compass Mall', 'Navruz Mall', 'Samarqand Darvoza',
+            'C1 Street', 'C1 Wok', 'Eco', 'Yunusabad Gallery', 'Glinka Wok', 'Chilonzor 20'
+        );
 
--- Ro'yxatda YO'Q bo'lgan har qanday eski filial faolsizlantiriladi —
--- o'chirilmaydi, chunki unga bog'liq eski hisobotlar/thread_id bo'lishi
--- mumkin, lekin ilovada endi ko'rinmaydi.
-UPDATE filials SET is_active = FALSE
-WHERE name NOT IN (
-    'Scopus Mall', 'City Mall', 'Alfraganus', 'Beruniy', 'Novza', 'Anhor',
-    'Sergeli', 'Tuzel', 'Compass Mall', 'Navruz Mall', 'Samarqand Darvoza',
-    'C1 Street', 'C1 Wok', 'Eco', 'Yunusabad Gallery', 'Glinka Wok', 'Chilonzor 20'
-);
+        INSERT INTO filials (name, sort_order, is_active) VALUES
+            ('Scopus Mall', 1, TRUE),
+            ('City Mall', 2, TRUE),
+            ('Alfraganus', 3, TRUE),
+            ('Beruniy', 4, TRUE),
+            ('Novza', 5, TRUE),
+            ('Anhor', 6, TRUE),
+            ('Sergeli', 7, TRUE),
+            ('Tuzel', 8, TRUE),
+            ('Compass Mall', 9, TRUE),
+            ('Navruz Mall', 10, TRUE),
+            ('Samarqand Darvoza', 11, TRUE),
+            ('C1 Street', 12, TRUE),
+            ('C1 Wok', 13, TRUE),
+            ('Eco', 14, TRUE),
+            ('Yunusabad Gallery', 15, TRUE),
+            ('Glinka Wok', 16, TRUE),
+            ('Chilonzor 20', 17, TRUE)
+        ON CONFLICT (name) DO UPDATE SET sort_order = EXCLUDED.sort_order, is_active = TRUE;
 
--- Kerakli filiallar mavjud, faol va bergan tartibingizda bo'lishini
--- ta'minlaymiz. `thread_id` ga tegilmaydi — mavjud filialning Telegram
--- topici saqlanib qoladi.
-INSERT INTO filials (name, sort_order, is_active) VALUES
-    ('Scopus Mall', 1, TRUE),
-    ('City Mall', 2, TRUE),
-    ('Alfraganus', 3, TRUE),
-    ('Beruniy', 4, TRUE),
-    ('Novza', 5, TRUE),
-    ('Anhor', 6, TRUE),
-    ('Sergeli', 7, TRUE),
-    ('Tuzel', 8, TRUE),
-    ('Compass Mall', 9, TRUE),
-    ('Navruz Mall', 10, TRUE),
-    ('Samarqand Darvoza', 11, TRUE),
-    ('C1 Street', 12, TRUE),
-    ('C1 Wok', 13, TRUE),
-    ('Eco', 14, TRUE),
-    ('Yunusabad Gallery', 15, TRUE),
-    ('Glinka Wok', 16, TRUE),
-    ('Chilonzor 20', 17, TRUE)
-ON CONFLICT (name) DO UPDATE SET sort_order = EXCLUDED.sort_order, is_active = TRUE;
+        INSERT INTO schema_migrations (id) VALUES ('seed_filials_v1');
+    END IF;
+END $$;
