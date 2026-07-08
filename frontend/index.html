@@ -11,38 +11,8 @@
 
 <div id="app">
 
-  <!-- 1-EKRAN: Rol tanlash -->
-  <section id="screen-role" class="screen active">
-    <div class="header">
-      <h1>Xush kelibsiz</h1>
-      <p class="subtitle">Davom etish uchun kim ekanligingizni tanlang</p>
-    </div>
-    <div class="role-options">
-      <button class="role-card" data-role="employee">
-        <span class="role-icon">🧑‍💼</span>
-        <span class="role-title">Filial xodimi</span>
-      </button>
-      <button class="role-card" data-role="guest">
-        <span class="role-icon">🙋</span>
-        <span class="role-title">Mehmon</span>
-      </button>
-    </div>
-  </section>
-
-  <!-- 2-EKRAN: Telefon so'rash (faqat mehmon uchun, agar bazada yo'q bo'lsa) -->
-  <section id="screen-contact" class="screen">
-    <div class="header">
-      <h1>Telefon raqami</h1>
-      <p class="subtitle">Davom etish uchun raqamingizni ulashing</p>
-    </div>
-    <div class="contact-box">
-      <button id="btn-share-contact" class="primary-btn">📱 Raqamni ulashish</button>
-      <p id="contact-hint" class="hint"></p>
-    </div>
-  </section>
-
-  <!-- 3-EKRAN: Filial tanlash -->
-  <section id="screen-filial" class="screen">
+  <!-- 1-EKRAN: Filial tanlash -->
+  <section id="screen-filial" class="screen active">
     <div class="header">
       <h1>Filialni tanlang</h1>
       <p class="subtitle">Hisobot qaysi filial uchun</p>
@@ -50,7 +20,7 @@
     <div id="filial-list" class="filial-list"></div>
   </section>
 
-  <!-- 4-EKRAN: Bo'limlar bo'yicha rasm olish -->
+  <!-- 2-EKRAN: Bo'limlar bo'yicha rasm olish -->
   <section id="screen-sections" class="screen">
     <div class="header">
       <h1 id="filial-name-title">Filial</h1>
@@ -62,7 +32,7 @@
     <div id="section-list" class="section-list"></div>
   </section>
 
-  <!-- 5-EKRAN: Muvaffaqiyat -->
+  <!-- 3-EKRAN: Muvaffaqiyat -->
   <section id="screen-success" class="screen">
     <div class="success-box">
       <span class="success-icon">✅</span>
@@ -73,7 +43,7 @@
   </section>
 
   <!-- Yashirin: bitta bo'lim uchun rasm capture inputi (JS orqali dinamik ochiladi) -->
-  <input type="file" id="camera-input" accept="image/*" capture="environment" style="display:none" />
+  <input type="file" id="camera-input" accept="image/*" capture="environment" multiple style="display:none" />
 
 </div>
 
