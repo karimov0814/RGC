@@ -168,3 +168,47 @@ avtomatik qayta deploy qiladi.
 `telegram_utils.validate_init_data()` har bir so'rovda **majburiy** chaqiriladi
 — bu orqali faqat haqiqiy Telegram mini app orqali kelgan so'rovlar qabul
 qilinadi (soxta so'rovlarning oldini oladi).
+
+## Ruxsat etilgan foydalanuvchilar (whitelist) va admin panel
+
+Mini app endi faqat `allowed_users` jadvalida ro'yxatdan o'tgan Telegram
+`user_id`larga ishlaydi. Ro'yxatda yo'q har qanday begona foydalanuvchi:
+
+- mini app'ni ochsa — **"ushbu bot ishlamaydi"** ekranini ko'radi;
+- botga `/start` bossa (agar `bot_listener.py` ishlatilsa) — xuddi shu
+  matnli javobni oladi.
+
+### Birinchi superadminni qo'shish (bootstrap)
+
+Bazada hali birorta ham foydalanuvchi bo'lmagani uchun, birinchi superadminni
+qo'lda qo'shib bo'lmaydi (chunki admin panelga kirish uchun ham superadmin
+bo'lish kerak). Shuning uchun backend `.env`/Railway Variables ga quyidagini
+qo'shing:
+
+```
+SUPERADMIN_IDS=123456789,987654321
+```
+
+Bu yerdagi Telegram `user_id`lar backend har safar ishga tushganda avtomatik
+`allowed_users` jadvaliga **superadmin** sifatida qo'shiladi (mavjud bo'lsa —
+superadmin huquqi yangilanadi). O'z Telegram `user_id`ingizni bilish uchun
+`@userinfobot` botidan foydalaning.
+
+### Admin panel
+
+Superadmin mini appni ochganda — oddiy filial/hisobot ekrani o'rniga avval
+**Admin panel** ochiladi:
+
+- **Userlar** — telegram user ID va (ixtiyoriy) ism bo'yicha yangi
+  foydalanuvchi qo'shish, mavjudini tahrirlash (ism / superadmin huquqi) yoki
+  o'chirish. O'zini-o'zi o'chirish taqiqlangan (qulflanib qolmaslik uchun).
+- **Filiallar** — yangi filial qo'shish, nomini tahrirlash, yoki
+  "o'chirish" (aslida faolsizlantirish — chunki eski filialga bog'liq
+  hisobotlar bazada saqlanib qoladi, shuning uchun to'liq o'chirilmaydi).
+- **Hisobot rejimi** — superadmin xohlasa, o'zi ham oddiy hisobot yuborish
+  oqimidan (filial tanlash → rasm yuborish) foydalana oladi; istalgan payt
+  "⚙️ Admin panelga qaytish" tugmasi orqali qaytadi.
+
+Barcha admin endpointlar (`/api/admin/...`) har bir so'rovda `init_data`
+orqali foydalanuvchi superadmin ekanini serverda qayta tekshiradi — frontend
+tomonidagi tekshiruv faqat UX uchun, xavfsizlik backendda ta'minlanadi.

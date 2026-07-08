@@ -2,6 +2,20 @@
 --  Filial Feedback Mini App — PostgreSQL sxemasi
 -- ============================================================
 
+-- ============================================================
+--  Ruxsat etilgan foydalanuvchilar (whitelist)
+--  Faqat shu jadvalda mavjud telegram_user_id lar mini app'dan
+--  foydalana oladi. is_superadmin = TRUE bo'lganlar admin panelga
+--  kira oladi (user/filial qo'shish, o'chirish, tahrirlash).
+-- ============================================================
+CREATE TABLE IF NOT EXISTS allowed_users (
+    id                SERIAL PRIMARY KEY,
+    telegram_user_id  BIGINT NOT NULL UNIQUE,
+    full_name         TEXT,
+    is_superadmin     BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at        TIMESTAMP NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS filials (
     id          SERIAL PRIMARY KEY,
     name        TEXT NOT NULL UNIQUE,     -- "Chilonzor filiali"

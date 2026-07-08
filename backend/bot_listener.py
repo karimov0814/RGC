@@ -32,6 +32,8 @@ WELCOME_TEXT = (
     "ulashing 👇"
 )
 
+NOT_ALLOWED_TEXT = "ushbu bot ishlamaydi"
+
 
 async def send_contact_request(client: httpx.AsyncClient, chat_id: int):
     keyboard = {
@@ -51,6 +53,19 @@ async def handle_update(client: httpx.AsyncClient, update: dict):
         return
 
     chat_id = message["chat"]["id"]
+    from_user_id = message.get("from", {}).get("id")
+
+    # Faqat ruxsat etilganlar (allowed_users) ro'yxatidagi foydalanuvchilar
+    # botdan foydalana oladi. Boshqa har qanday begona foydalanuvchi uchun
+    # /start bosganda "ushbu bot ishlamaydi" deb javob beramiz.
+    allowed = await db.get_allowed_user(from_user_id) if from_user_id else None
+    if not allowed:
+        if message.get("text") == "/start":
+            await client.post(
+                f"{TG_API}/sendMessage",
+                json={"chat_id": chat_id, "text": NOT_ALLOWED_TEXT},
+            )
+        return
 
     # /start bosilganda — agar telefon hali bazada bo'lmasa, so'raymiz
     if message.get("text") == "/start":

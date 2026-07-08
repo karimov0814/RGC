@@ -11,11 +11,64 @@
 
 <div id="app">
 
+  <!-- 0-EKRAN: Ruxsat yo'q -->
+  <section id="screen-blocked" class="screen">
+    <div class="success-box">
+      <span class="success-icon">⛔️</span>
+      <h1>ushbu bot ishlamaydi</h1>
+    </div>
+  </section>
+
+  <!-- ADMIN EKRAN: Superadmin panel -->
+  <section id="screen-admin" class="screen">
+    <div class="header">
+      <h1>Admin panel</h1>
+      <p class="subtitle">Foydalanuvchilar va filiallarni boshqarish</p>
+    </div>
+
+    <div class="admin-tabs">
+      <button class="admin-tab-btn active" data-tab="admin-tab-users">Userlar</button>
+      <button class="admin-tab-btn" data-tab="admin-tab-filials">Filiallar</button>
+      <button class="admin-tab-btn" data-tab="admin-tab-report">Hisobot rejimi</button>
+    </div>
+
+    <!-- Userlar -->
+    <div id="admin-tab-users" class="admin-tab-content active">
+      <div class="admin-add-box">
+        <h2>Yangi foydalanuvchi qo'shish</h2>
+        <input type="text" id="new-user-id" class="admin-input" placeholder="Telegram user ID (masalan 123456789)" inputmode="numeric" />
+        <input type="text" id="new-user-name" class="admin-input" placeholder="Ism (ixtiyoriy)" />
+        <label class="admin-checkbox"><input type="checkbox" id="new-user-superadmin" /> Superadmin huquqi</label>
+        <button id="btn-add-user" class="primary-btn">➕ Qo'shish</button>
+      </div>
+      <div id="users-list" class="admin-list"></div>
+    </div>
+
+    <!-- Filiallar -->
+    <div id="admin-tab-filials" class="admin-tab-content">
+      <div class="admin-add-box">
+        <h2>Yangi filial qo'shish</h2>
+        <input type="text" id="new-filial-name" class="admin-input" placeholder="Filial nomi" />
+        <button id="btn-add-filial" class="primary-btn">➕ Qo'shish</button>
+      </div>
+      <div id="filials-list" class="admin-list"></div>
+    </div>
+
+    <!-- Hisobot rejimi -->
+    <div id="admin-tab-report" class="admin-tab-content">
+      <p class="subtitle">Superadmin sifatida ham oddiy hisobot yubora olasiz.</p>
+      <button id="btn-goto-report" class="primary-btn">📷 Hisobot yuborish</button>
+    </div>
+  </section>
+
   <!-- 1-EKRAN: Filial tanlash -->
-  <section id="screen-filial" class="screen active">
+  <section id="screen-filial" class="screen">
     <div class="header">
       <h1>Filialni tanlang</h1>
       <p class="subtitle">Hisobot qaysi filial uchun</p>
+    </div>
+    <div id="admin-back-bar" class="hidden">
+      <button id="btn-back-to-admin" class="secondary-btn">⚙️ Admin panelga qaytish</button>
     </div>
     <div id="filial-list" class="filial-list"></div>
   </section>
