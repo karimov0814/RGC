@@ -10,11 +10,6 @@ tg.expand();
 
 const initData = tg.initData; // backendga validatsiya uchun yuboriladi
 
-// Rol tanlash ekrani olib tashlandi — hozircha barcha yuborishlar "employee"
-// sifatida belgilanadi. Kelajakda mehmon oqimi kerak bo'lsa, shu qiymatni
-// dinamik qilish kifoya.
-const ROLE = "employee";
-
 // ---------- Holat (state) ----------
 const state = {
   filial: null,     // {id, name}
@@ -207,7 +202,6 @@ async function submitReport() {
     const formData = new FormData();
     formData.append("init_data", initData);
     formData.append("filial_id", state.filial.id);
-    formData.append("role", ROLE);
 
     const meta = [];
     state.sections.forEach((sec) => {
