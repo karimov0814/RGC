@@ -29,7 +29,7 @@ async def close_pool():
 async def list_active_filials():
     pool = await get_pool()
     rows = await pool.fetch(
-        "SELECT id, name, thread_id FROM filials WHERE is_active = TRUE ORDER BY name"
+        "SELECT id, name, thread_id FROM filials WHERE is_active = TRUE ORDER BY sort_order, name"
     )
     return [dict(r) for r in rows]
 
