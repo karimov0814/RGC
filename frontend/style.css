@@ -1,0 +1,218 @@
+:root {
+  --bg: var(--tg-theme-bg-color, #ffffff);
+  --secondary-bg: var(--tg-theme-secondary-bg-color, #f4f4f5);
+  --text: var(--tg-theme-text-color, #17181a);
+  --hint: var(--tg-theme-hint-color, #8b8d97);
+  --link: var(--tg-theme-link-color, #2f6fed);
+  --button: var(--tg-theme-button-color, #2f6fed);
+  --button-text: var(--tg-theme-button-text-color, #ffffff);
+  --accent: #1fae7a;
+  --danger: #e5484d;
+  --radius: 16px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.screen {
+  display: none;
+  flex-direction: column;
+  padding: 20px 16px 100px;
+  min-height: 100vh;
+  animation: fadeIn .18s ease;
+}
+.screen.active { display: flex; }
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.header { margin-bottom: 20px; }
+.header h1 { font-size: 22px; font-weight: 700; margin: 0 0 4px; letter-spacing: -0.01em; }
+.subtitle { color: var(--hint); font-size: 14px; margin: 0; }
+
+/* ---------- Rol tanlash ---------- */
+.role-options {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
+}
+.role-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px;
+  border-radius: var(--radius);
+  border: 1px solid rgba(139,141,151,0.18);
+  background: var(--secondary-bg);
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: transform .12s ease, border-color .12s ease;
+}
+.role-card:active { transform: scale(0.98); border-color: var(--button); }
+.role-icon { font-size: 26px; }
+
+/* ---------- Kontakt ---------- */
+.contact-box { display: flex; flex-direction: column; align-items: center; gap: 14px; margin-top: 40px; }
+.hint { color: var(--hint); font-size: 13px; text-align: center; margin: 0; }
+
+/* ---------- Filial ro'yxati ---------- */
+.filial-list { display: flex; flex-direction: column; gap: 10px; }
+.filial-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  border-radius: 14px;
+  background: var(--secondary-bg);
+  border: 1px solid rgba(139,141,151,0.15);
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.filial-item:active { transform: scale(0.98); }
+.filial-item .arrow { color: var(--hint); }
+
+/* ---------- Progress ---------- */
+.progress-wrap { margin-top: 6px; }
+.progress-bar {
+  height: 8px;
+  background: var(--secondary-bg);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+.progress-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--accent);
+  transition: width .25s ease;
+}
+
+/* ---------- Bo'limlar ro'yxati ---------- */
+.section-list { display: flex; flex-direction: column; gap: 12px; }
+.section-card {
+  border-radius: var(--radius);
+  background: var(--secondary-bg);
+  border: 1px solid rgba(139,141,151,0.15);
+  padding: 14px;
+}
+.section-card.done { border-color: var(--accent); }
+
+.section-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.section-title { font-weight: 600; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+.section-status-icon { font-size: 16px; }
+
+.section-photo-area {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.photo-preview {
+  width: 64px;
+  height: 64px;
+  border-radius: 10px;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: rgba(0,0,0,0.05);
+}
+.capture-btn {
+  flex: 1;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1.5px dashed rgba(139,141,151,0.4);
+  background: transparent;
+  color: var(--link);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.comment-input {
+  width: 100%;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(139,141,151,0.25);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  resize: none;
+}
+
+.retake-btn {
+  font-size: 12px;
+  color: var(--hint);
+  background: none;
+  border: none;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 6px 0 0;
+}
+
+/* ---------- Tugmalar ---------- */
+.primary-btn {
+  padding: 14px 20px;
+  border-radius: 12px;
+  border: none;
+  background: var(--button);
+  color: var(--button-text);
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  width: 100%;
+}
+.primary-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.bottom-bar {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  padding: 12px 16px calc(env(safe-area-inset-bottom, 0) + 12px);
+  background: linear-gradient(to top, var(--bg) 60%, transparent);
+}
+
+/* ---------- Muvaffaqiyat ---------- */
+.success-box { margin: auto; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.success-icon { font-size: 52px; }
+
+/* ---------- Overlay ---------- */
+.overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.45);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 14px;
+  color: #fff;
+  z-index: 999;
+}
+.overlay.hidden { display: none; }
+.spinner {
+  width: 36px; height: 36px;
+  border: 3px solid rgba(255,255,255,0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }

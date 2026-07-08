@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Filial Hisobot</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<div id="app">
+
+  <!-- 1-EKRAN: Rol tanlash -->
+  <section id="screen-role" class="screen active">
+    <div class="header">
+      <h1>Xush kelibsiz</h1>
+      <p class="subtitle">Davom etish uchun kim ekanligingizni tanlang</p>
+    </div>
+    <div class="role-options">
+      <button class="role-card" data-role="employee">
+        <span class="role-icon">🧑‍💼</span>
+        <span class="role-title">Filial xodimi</span>
+      </button>
+      <button class="role-card" data-role="guest">
+        <span class="role-icon">🙋</span>
+        <span class="role-title">Mehmon</span>
+      </button>
+    </div>
+  </section>
+
+  <!-- 2-EKRAN: Telefon so'rash (faqat mehmon uchun, agar bazada yo'q bo'lsa) -->
+  <section id="screen-contact" class="screen">
+    <div class="header">
+      <h1>Telefon raqami</h1>
+      <p class="subtitle">Davom etish uchun raqamingizni ulashing</p>
+    </div>
+    <div class="contact-box">
+      <button id="btn-share-contact" class="primary-btn">📱 Raqamni ulashish</button>
+      <p id="contact-hint" class="hint"></p>
+    </div>
+  </section>
+
+  <!-- 3-EKRAN: Filial tanlash -->
+  <section id="screen-filial" class="screen">
+    <div class="header">
+      <h1>Filialni tanlang</h1>
+      <p class="subtitle">Hisobot qaysi filial uchun</p>
+    </div>
+    <div id="filial-list" class="filial-list"></div>
+  </section>
+
+  <!-- 4-EKRAN: Bo'limlar bo'yicha rasm olish -->
+  <section id="screen-sections" class="screen">
+    <div class="header">
+      <h1 id="filial-name-title">Filial</h1>
+      <div class="progress-wrap">
+        <div class="progress-bar"><div id="progress-fill" class="progress-fill"></div></div>
+        <span id="progress-text" class="hint">0 / 0 bo'lim</span>
+      </div>
+    </div>
+    <div id="section-list" class="section-list"></div>
+  </section>
+
+  <!-- 5-EKRAN: Muvaffaqiyat -->
+  <section id="screen-success" class="screen">
+    <div class="success-box">
+      <span class="success-icon">✅</span>
+      <h1>Yuborildi!</h1>
+      <p class="subtitle">Barcha rasmlar tegishli filial bo'limiga yetkazildi. Rahmat!</p>
+      <button id="btn-close" class="primary-btn">Yopish</button>
+    </div>
+  </section>
+
+  <!-- Yashirin: bitta bo'lim uchun rasm capture inputi (JS orqali dinamik ochiladi) -->
+  <input type="file" id="camera-input" accept="image/*" capture="environment" style="display:none" />
+
+</div>
+
+<div id="overlay-loading" class="overlay hidden">
+  <div class="spinner"></div>
+  <p id="loading-text">Yuborilmoqda...</p>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
