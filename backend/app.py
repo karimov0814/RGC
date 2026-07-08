@@ -34,9 +34,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-ROLE_LABELS = {"employee": "Filial xodimi", "guest": "Mehmon"}
-
-
 @app.on_event("startup")
 async def _startup():
     """Railway'da har deployda jadvallar mavjudligini avtomatik ta'minlaydi
@@ -79,32 +76,16 @@ async def get_config(init_data: str):
 
 
 # ---------------------------------------------------------------------------
-# 2) Mehmon uchun: telefon raqami bazada bor-yo'qligini tekshirish
-#    (raqamning o'zi botga alohida "contact" xabari sifatida keladi,
-#     uni bot_listener.py ushlab bazaga yozadi)
-# ---------------------------------------------------------------------------
-@app.get("/api/contact-status")
-async def contact_status(init_data: str):
-    user = _check_auth(init_data)
-    contact = await db.get_contact(user["id"])
-    return {"has_contact": contact is not None, "phone": contact["phone"] if contact else None}
-
-
-# ---------------------------------------------------------------------------
-# 3) Yakuniy yuborish: filial + rol + har bir bo'lim uchun rasm(lar)
+# 2) Yakuniy yuborish: filial + har bir bo'lim uchun rasm(lar)
 # ---------------------------------------------------------------------------
 @app.post("/api/submit")
 async def submit(
     init_data: str = Form(...),
     filial_id: int = Form(...),
-    role: str = Form(...),  # "employee" | "guest"
     items_meta: str = Form(...),  # JSON: [{"section_id": 1, "field": "photo_1", "comment": "..."}]
     files: List[UploadFile] = File(...),
 ):
     user = _check_auth(init_data)
-
-    if role not in ROLE_LABELS:
-        raise HTTPException(status_code=400, detail="role noto'g'ri")
 
     filial = await db.get_filial(filial_id)
     if not filial:
@@ -126,21 +107,13 @@ async def submit(
 
     full_name = " ".join(filter(None, [user.get("first_name"), user.get("last_name")])) or user.get("username") or "Noma'lum"
 
-    phone = None
-    if role == "guest":
-        contact = await db.get_contact(user["id"])
-        phone = contact["phone"] if contact else None
-
     submission_id = await db.create_submission(
         filial_id=filial_id,
         telegram_user_id=user["id"],
         full_name=full_name,
-        phone=phone,
-        role=role,
     )
 
     now_str = datetime.now().strftime("%d.%m.%Y %H:%M")
-    role_label = ROLE_LABELS[role]
 
     # field nomi -> UploadFile
     files_by_field = {f.filename or f"file_{i}": f for i, f in enumerate(files)}
@@ -150,7 +123,7 @@ async def submit(
         section_name = item.get("section_name", "")
         comment = (item.get("comment") or "").strip()
 
-        caption = f"🏢 <b>{filial['name']}</b>\n🕒 {now_str}\n👤 {role_label}: {full_name}"
+        caption = f"🏢 <b>{filial['name']}</b>\n🕒 {now_str}\n👤 {full_name}"
         if section_name:
             caption += f"\n📍 Bo'lim: {section_name}"
         if comment:
