@@ -36,6 +36,16 @@ CREATE TABLE IF NOT EXISTS submission_photos (
 );
 
 -- ============================================================
+--  Eski "rol" tizimidan qolgan ustun/jadvallarni tozalash
+--  (CREATE TABLE IF NOT EXISTS mavjud jadvalni o'zgartirmaydi,
+--   shuning uchun eski bazalarda role/phone hali ham qolgan bo'lishi
+--   mumkin edi — shu DROP'lar uni xavfsiz olib tashlaydi)
+-- ============================================================
+ALTER TABLE submissions DROP COLUMN IF EXISTS role;
+ALTER TABLE submissions DROP COLUMN IF EXISTS phone;
+DROP TABLE IF EXISTS user_contacts;
+
+-- ============================================================
 --  Bo'limlarni FAQAT quyidagi ro'yxat bilan cheklash
 --  (idempotent migratsiya — har ishga tushishda xavfsiz qayta bajariladi)
 -- ============================================================
