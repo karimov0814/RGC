@@ -156,6 +156,7 @@ async def submit(
 
     submission_id = await db.create_submission(
         filial_id=filial_id,
+        filial_name=filial["name"],
         telegram_user_id=user["id"],
         full_name=full_name,
     )
@@ -291,10 +292,27 @@ async def admin_update_filial(
 
 @app.delete("/api/admin/filials/{filial_id}")
 async def admin_delete_filial(filial_id: int, init_data: str):
-    """Filialni butunlay bazadan o'chirmaydi (unga bog'liq eski hisobotlar
-    bo'lishi mumkin), balki faolsizlantiradi — ro'yxatdan yo'qoladi."""
+    """Filialni bazadan BUTUNLAY o'chiradi (nofaol bo'lib qolib ketmaydi).
+    Bog'liq eski hisobotlar saqlanib qoladi (filial_id NULL bo'ladi,
+    filial nomi esa snapshot sifatida saqlanadi)."""
     await _check_superadmin(init_data)
-    ok = await db.deactivate_filial(filial_id)
+    ok = await db.delete_filial(filial_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Filial topilmadi")
     return {"ok": True}
+
+
+@app.put("/api/admin/filials/{filial_id}/active")
+async def admin_set_filial_active(
+    filial_id: int,
+    init_data: str = Form(...),
+    is_active: bool = Form(...),
+):
+    """Superadmin filialni ko'z icon orqali faol/nofaol qilib qo'yadi —
+    filial bazada qoladi, faqat oddiy foydalanuvchilarga ko'rinmay
+    qoladi (filialni butunlay o'chirmaydi)."""
+    await _check_superadmin(init_data)
+    filial = await db.set_filial_active(filial_id, is_active)
+    if not filial:
+        raise HTTPException(status_code=404, detail="Filial topilmadi")
+    return {"ok": True, "filial": filial}

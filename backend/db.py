@@ -133,15 +133,30 @@ async def update_filial(filial_id: int, name: str, is_active: bool) -> Optional[
     return dict(row) if row else None
 
 
-async def deactivate_filial(filial_id: int) -> bool:
-    """Filialni butunlay o'chirish o'rniga faolsizlantiradi — chunki unga
-    bog'liq eski hisobotlar (submissions) bo'lishi mumkin va FK buni
-    talab qiladi. Ilovada endi ko'rinmaydi."""
+async def delete_filial(filial_id: int) -> bool:
+    """Filialni bazadan BUTUNLAY o'chirib tashlaydi. Bog'liq eski
+    hisobotlar (submissions) saqlanib qoladi — ularning filial_id
+    ustuni NULL bo'lib qoladi (FK: ON DELETE SET NULL), filial nomi esa
+    submissions.filial_name_snapshot orqali tarixda saqlanib qoladi."""
     pool = await get_pool()
-    result = await pool.execute(
-        "UPDATE filials SET is_active = FALSE WHERE id = $1", filial_id
-    )
+    result = await pool.execute("DELETE FROM filials WHERE id = $1", filial_id)
     return result.endswith(" 1")
+
+
+async def set_filial_active(filial_id: int, is_active: bool) -> Optional[dict]:
+    """Filialni faol/nofaol qilib qo'yadi (ko'z icon). Bazadan
+    o'chirmaydi — faqat ro'yxatlarda ko'rinish/ko'rinmasligini
+    boshqaradi, superadmin xohlagan payt qayta faollashtirishi mumkin."""
+    pool = await get_pool()
+    row = await pool.fetchrow(
+        """
+        UPDATE filials SET is_active = $2
+        WHERE id = $1
+        RETURNING id, name, thread_id, sort_order, is_active
+        """,
+        filial_id, is_active,
+    )
+    return dict(row) if row else None
 
 
 # ---------- Bo'limlar ----------
@@ -156,14 +171,14 @@ async def list_active_sections():
 
 # ---------- Submissionlar ----------
 
-async def create_submission(filial_id: int, telegram_user_id: int, full_name: str) -> int:
+async def create_submission(filial_id: int, filial_name: str, telegram_user_id: int, full_name: str) -> int:
     pool = await get_pool()
     row = await pool.fetchrow(
         """
-        INSERT INTO submissions (filial_id, telegram_user_id, full_name)
-        VALUES ($1, $2, $3) RETURNING id
+        INSERT INTO submissions (filial_id, filial_name_snapshot, telegram_user_id, full_name)
+        VALUES ($1, $2, $3, $4) RETURNING id
         """,
-        filial_id, telegram_user_id, full_name,
+        filial_id, filial_name, telegram_user_id, full_name,
     )
     return row["id"]
 

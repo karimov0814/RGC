@@ -196,3 +196,33 @@ BEGIN
         INSERT INTO schema_migrations (id) VALUES ('seed_filials_v1');
     END IF;
 END $$;
+
+-- ============================================================
+--  Filialni SUPERADMIN "o'chirish" tugmasi orqali ENDI TO'LIQ
+--  o'chirib tashlash mumkin (avval faqat is_active=FALSE qilib
+--  "nofaol" holatda qolib ketardi). Buning uchun:
+--    1) submissions.filial_id NOT NULL bo'lishi shart emas —
+--       filial o'chirilganda eski hisobotlar saqlanib qoladi,
+--       faqat filial_id NULL bo'lib qoladi (FK: ON DELETE SET NULL).
+--    2) Filial nomi submissions.filial_name_snapshot ustunida
+--       "suratga olingan holda" saqlanadi, shunda filial o'chirilgan
+--       taqdirda ham eski hisobotlarda qaysi filialga tegishli
+--       ekani ko'rinib turadi.
+--  Bu bloklar xavfsiz tarzda har safar qayta ishlashi mumkin
+--  (idempotent), shuning uchun schema_migrations orqali qulflanmagan.
+-- ============================================================
+ALTER TABLE submissions ADD COLUMN IF NOT EXISTS filial_name_snapshot TEXT;
+
+ALTER TABLE submissions ALTER COLUMN filial_id DROP NOT NULL;
+
+ALTER TABLE submissions DROP CONSTRAINT IF EXISTS submissions_filial_id_fkey;
+ALTER TABLE submissions
+    ADD CONSTRAINT submissions_filial_id_fkey
+    FOREIGN KEY (filial_id) REFERENCES filials(id) ON DELETE SET NULL;
+
+-- Eski qatorlarda filial_name_snapshot bo'sh bo'lsa, hozirgi filial
+-- nomidan bir martalik to'ldiramiz (faqat hali to'ldirilmagan joyda).
+UPDATE submissions s
+SET filial_name_snapshot = f.name
+FROM filials f
+WHERE s.filial_id = f.id AND s.filial_name_snapshot IS NULL;

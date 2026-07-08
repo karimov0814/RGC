@@ -1,14 +1,28 @@
+/* ============================================================
+   Filial Hisobot — minimalist / line-icon dizayn tizimi
+   Prinsip: neytral fon, ingichka (hairline) chegaralar, bitta
+   ranglar bilan jimjimasiz interfeys, og'ir soyalar va emoji
+   o'rniga bir xil qalinlikdagi (1.6px stroke) chiziqli ikonkalar.
+   ============================================================ */
+
 :root {
   --bg: var(--tg-theme-bg-color, #ffffff);
-  --secondary-bg: var(--tg-theme-secondary-bg-color, #f4f4f5);
+  --surface: var(--tg-theme-secondary-bg-color, #f6f6f7);
   --text: var(--tg-theme-text-color, #17181a);
-  --hint: var(--tg-theme-hint-color, #8b8d97);
+  --hint: var(--tg-theme-hint-color, #90919a);
   --link: var(--tg-theme-link-color, #2f6fed);
-  --button: var(--tg-theme-button-color, #2f6fed);
+  --button: var(--tg-theme-button-color, #17181a);
   --button-text: var(--tg-theme-button-text-color, #ffffff);
-  --accent: #1fae7a;
-  --danger: #e5484d;
-  --radius: 16px;
+
+  --accent: #1f7a5c;       /* muvaffaqiyat / faol holat */
+  --danger: #c9433f;       /* o'chirish / xato */
+
+  --line: rgba(23, 24, 26, 0.10);
+  --line-strong: rgba(23, 24, 26, 0.18);
+
+  --radius-sm: 10px;
+  --radius: 14px;
+  --icon-stroke: 1.6;
 }
 
 * { box-sizing: border-box; }
@@ -31,63 +45,92 @@ html, body {
 .screen {
   display: none;
   flex-direction: column;
-  padding: 20px 16px 100px;
+  padding: 24px 18px 100px;
   min-height: 100vh;
-  animation: fadeIn .18s ease;
+  animation: fadeIn .16s ease;
 }
 .screen.active { display: flex; }
 
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(6px); }
+  from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
-.header { margin-bottom: 20px; }
-.header h1 { font-size: 22px; font-weight: 700; margin: 0 0 4px; letter-spacing: -0.01em; }
-.subtitle { color: var(--hint); font-size: 14px; margin: 0; }
+.header { margin-bottom: 22px; }
+.header h1 { font-size: 21px; font-weight: 600; margin: 0 0 4px; letter-spacing: -0.01em; }
+.subtitle { color: var(--hint); font-size: 13.5px; margin: 0; line-height: 1.4; }
 
 .hint { color: var(--hint); font-size: 13px; text-align: center; margin: 0; }
 
+/* ---------- Ikonkalar (chiziqli, currentColor) ---------- */
+.icon {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  vertical-align: -0.15em;
+}
+.icon svg { display: block; width: 100%; height: 100%; }
+
+.btn-icon { display: inline-flex; width: 16px; height: 16px; margin-right: 6px; vertical-align: -3px; }
+.btn-icon svg { width: 100%; height: 100%; }
+
+.state-icon {
+  width: 46px;
+  height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1.5px solid var(--line-strong);
+  color: var(--text);
+}
+.state-icon svg { width: 24px; height: 24px; }
+.state-icon--accent { border-color: var(--accent); color: var(--accent); }
+.state-icon--muted { border-color: var(--line-strong); color: var(--hint); }
+
 /* ---------- Filial ro'yxati ---------- */
-.filial-list { display: flex; flex-direction: column; gap: 10px; }
+.filial-list { display: flex; flex-direction: column; gap: 8px; }
 .filial-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px;
-  border-radius: 14px;
-  background: var(--secondary-bg);
-  border: 1px solid rgba(139,141,151,0.15);
-  font-size: 16px;
-  font-weight: 600;
+  padding: 15px 16px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  border: 1px solid var(--line);
+  font-size: 15.5px;
+  font-weight: 500;
   cursor: pointer;
+  transition: border-color .12s ease;
 }
-.filial-item:active { transform: scale(0.98); }
-.filial-item .arrow { color: var(--hint); }
+.filial-item:active { border-color: var(--line-strong); transform: scale(0.99); }
+.filial-item .arrow { color: var(--hint); display: flex; }
+.filial-item .arrow svg { width: 16px; height: 16px; }
 
 /* ---------- Progress ---------- */
-.progress-wrap { margin-top: 6px; }
+.progress-wrap { margin-top: 4px; }
 .progress-bar {
-  height: 8px;
-  background: var(--secondary-bg);
+  height: 3px;
+  background: var(--line);
   border-radius: 999px;
   overflow: hidden;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 .progress-fill {
   height: 100%;
   width: 0%;
-  background: var(--accent);
+  background: var(--text);
   transition: width .25s ease;
 }
 
 /* ---------- Bo'limlar ro'yxati ---------- */
-.section-list { display: flex; flex-direction: column; gap: 12px; }
+.section-list { display: flex; flex-direction: column; gap: 10px; }
 .section-card {
   border-radius: var(--radius);
-  background: var(--secondary-bg);
-  border: 1px solid rgba(139,141,151,0.15);
+  background: transparent;
+  border: 1px solid var(--line);
   padding: 14px;
+  transition: border-color .15s ease;
 }
 .section-card.done { border-color: var(--accent); }
 
@@ -96,15 +139,25 @@ html, body {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 10px;
+  gap: 8px;
 }
-.section-title { font-weight: 600; font-size: 15px; display: flex; align-items: center; gap: 8px; }
-.section-status-icon { font-size: 16px; }
-.photo-count { font-size: 12px; color: var(--hint); font-weight: 600; }
+.section-title { font-weight: 500; font-size: 14.5px; display: flex; align-items: center; gap: 8px; }
+.section-status-icon {
+  width: 18px; height: 18px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 1.5px solid var(--line-strong);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--accent);
+}
+.section-status-icon svg { width: 11px; height: 11px; }
+.section-card.done .section-status-icon { border-color: var(--accent); }
+.photo-count { font-size: 12px; color: var(--hint); font-weight: 500; white-space: nowrap; }
 
 .photo-preview {
-  border-radius: 10px;
+  border-radius: 8px;
   object-fit: cover;
-  background: rgba(0,0,0,0.05);
+  background: var(--surface);
   display: block;
 }
 
@@ -116,8 +169,8 @@ html, body {
 }
 .photo-thumb-wrap {
   position: relative;
-  width: 64px;
-  height: 64px;
+  width: 62px;
+  height: 62px;
   flex-shrink: 0;
 }
 .photo-thumb-wrap .photo-preview {
@@ -132,72 +185,67 @@ html, body {
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  border: none;
+  border: 1.5px solid var(--bg);
   background: var(--danger);
   color: #fff;
-  font-size: 13px;
-  line-height: 1;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 0;
 }
+.remove-photo-btn svg { width: 10px; height: 10px; }
 .add-photo-btn {
-  width: 64px;
-  height: 64px;
+  width: 62px;
+  height: 62px;
   flex-shrink: 0;
-  border-radius: 10px;
-  border: 1.5px dashed rgba(139,141,151,0.4);
+  border-radius: 8px;
+  border: 1.5px dashed var(--line-strong);
   background: transparent;
-  color: var(--link);
+  color: var(--hint);
   font-size: 10px;
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
+  gap: 3px;
   text-align: center;
   padding: 2px;
 }
-.add-photo-btn span:first-child { font-size: 16px; }
+.add-photo-btn .icon { width: 16px; height: 16px; }
 .comment-input {
   width: 100%;
   margin-top: 10px;
   padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px solid rgba(139,141,151,0.25);
-  background: var(--bg);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: transparent;
   color: var(--text);
-  font-size: 14px;
+  font-size: 13.5px;
   resize: none;
+  font-family: inherit;
 }
-
-.retake-btn {
-  font-size: 12px;
-  color: var(--hint);
-  background: none;
-  border: none;
-  text-decoration: underline;
-  cursor: pointer;
-  padding: 6px 0 0;
-}
+.comment-input:focus { outline: none; border-color: var(--line-strong); }
 
 /* ---------- Tugmalar ---------- */
 .primary-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   padding: 14px 20px;
-  border-radius: 12px;
+  border-radius: var(--radius-sm);
   border: none;
   background: var(--button);
   color: var(--button-text);
-  font-size: 16px;
-  font-weight: 700;
+  font-size: 15px;
+  font-weight: 600;
   cursor: pointer;
   width: 100%;
 }
-.primary-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.primary-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.primary-btn.danger { background: var(--danger); }
 
 .bottom-bar {
   position: fixed;
@@ -206,14 +254,14 @@ html, body {
   background: linear-gradient(to top, var(--bg) 60%, transparent);
 }
 
-/* ---------- Muvaffaqiyat ---------- */
-.success-box { margin: auto; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 10px; }
-.success-icon { font-size: 52px; }
+/* ---------- Muvaffaqiyat / bloklangan ekran ---------- */
+.success-box { margin: auto; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.success-box h1 { font-size: 19px; font-weight: 600; margin: 4px 0 0; }
 
-/* ---------- Overlay ---------- */
+/* ---------- Overlay (loading) ---------- */
 .overlay {
   position: fixed; inset: 0;
-  background: rgba(0,0,0,0.45);
+  background: rgba(23,24,26,0.55);
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 14px;
   color: #fff;
@@ -221,8 +269,8 @@ html, body {
 }
 .overlay.hidden { display: none; }
 .spinner {
-  width: 36px; height: 36px;
-  border: 3px solid rgba(255,255,255,0.3);
+  width: 30px; height: 30px;
+  border: 2px solid rgba(255,255,255,0.25);
   border-top-color: #fff;
   border-radius: 50%;
   animation: spin .7s linear infinite;
@@ -231,72 +279,73 @@ html, body {
 
 .hidden { display: none !important; }
 
-/* ---------- Ruxsat yo'q ekrani ---------- */
-#screen-blocked .success-icon { font-size: 52px; }
-#screen-blocked h1 { font-size: 20px; }
-
 /* ---------- Admin panelga qaytish tugmasi ---------- */
 #admin-back-bar { margin-bottom: 14px; }
 .secondary-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 100%;
   padding: 12px 16px;
-  border-radius: 12px;
-  border: 1px solid rgba(139,141,151,0.3);
-  background: var(--secondary-bg);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line-strong);
+  background: transparent;
   color: var(--text);
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 13.5px;
+  font-weight: 500;
   cursor: pointer;
 }
 
 /* ---------- Admin panel ---------- */
 .admin-tabs {
   display: flex;
-  gap: 6px;
-  margin-bottom: 18px;
-  background: var(--secondary-bg);
-  border-radius: 12px;
-  padding: 4px;
+  gap: 2px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--line);
 }
 .admin-tab-btn {
   flex: 1;
   padding: 10px 6px;
   border: none;
-  border-radius: 9px;
+  border-bottom: 2px solid transparent;
   background: transparent;
   color: var(--hint);
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
+  margin-bottom: -1px;
 }
 .admin-tab-btn.active {
-  background: var(--bg);
   color: var(--text);
+  border-bottom-color: var(--text);
+  font-weight: 600;
 }
 
 .admin-tab-content { display: none; flex-direction: column; gap: 16px; }
 .admin-tab-content.active { display: flex; }
 
 .admin-add-box {
-  background: var(--secondary-bg);
-  border: 1px solid rgba(139,141,151,0.15);
+  background: transparent;
+  border: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 14px;
+  padding: 16px;
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
-.admin-add-box h2 { font-size: 14px; font-weight: 700; margin: 0 0 2px; }
+.admin-add-box h2 { font-size: 13px; font-weight: 600; margin: 0 0 2px; color: var(--hint); text-transform: uppercase; letter-spacing: 0.02em; }
 
 .admin-input {
   width: 100%;
   padding: 12px 14px;
-  border-radius: 10px;
-  border: 1px solid rgba(139,141,151,0.25);
-  background: var(--bg);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: transparent;
   color: var(--text);
   font-size: 14px;
+  font-family: inherit;
 }
+.admin-input:focus { outline: none; border-color: var(--line-strong); }
 
 .admin-checkbox {
   display: flex;
@@ -306,38 +355,116 @@ html, body {
   color: var(--hint);
   cursor: pointer;
 }
+.admin-checkbox input { accent-color: var(--text); }
 
-.admin-list { display: flex; flex-direction: column; gap: 8px; }
+.admin-list { display: flex; flex-direction: column; gap: 6px; }
 .admin-list-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 12px 14px;
-  border-radius: 12px;
-  background: var(--secondary-bg);
-  border: 1px solid rgba(139,141,151,0.15);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  border: 1px solid var(--line);
+  gap: 10px;
 }
+.admin-list-item.is-inactive { opacity: 0.5; }
 .admin-list-main { min-width: 0; }
 .admin-list-title {
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 13.5px;
+  font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
-.admin-list-sub { font-size: 12px; color: var(--hint); margin-top: 2px; }
-.admin-list-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  color: var(--hint);
+  flex-shrink: 0;
+}
+.badge svg { width: 100%; height: 100%; }
+.badge-text {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--hint);
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  padding: 1px 7px;
+  flex-shrink: 0;
+}
+.admin-list-sub { font-size: 11.5px; color: var(--hint); margin-top: 2px; }
+.admin-list-actions { display: flex; gap: 4px; flex-shrink: 0; }
 
 .icon-btn {
   width: 32px;
   height: 32px;
   border-radius: 8px;
-  border: none;
-  background: var(--bg);
-  font-size: 14px;
+  border: 1px solid var(--line);
+  background: transparent;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
+  color: var(--text);
+  padding: 0;
 }
+.icon-btn svg { width: 15px; height: 15px; }
 .icon-btn.danger { color: var(--danger); }
+.icon-btn.active-toggle.is-off { color: var(--hint); }
+.icon-btn:active { border-color: var(--line-strong); }
+
+/* ---------- Universal modal (alert/confirm/prompt o'rniga) ---------- */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(23,24,26,0.45);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 1000;
+  padding: 0;
+}
+.modal-overlay.hidden { display: none; }
+.modal-box {
+  width: 100%;
+  max-width: 480px;
+  background: var(--bg);
+  border-radius: 18px 18px 0 0;
+  padding: 20px 18px calc(env(safe-area-inset-bottom, 0) + 18px);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  animation: modalUp .18s ease;
+}
+@media (min-width: 520px) {
+  .modal-overlay { align-items: center; }
+  .modal-box { border-radius: var(--radius); }
+}
+@keyframes modalUp {
+  from { transform: translateY(16px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.modal-title { font-size: 16px; font-weight: 600; margin: 0 0 2px; }
+.modal-message { font-size: 13.5px; color: var(--hint); margin: 0 0 6px; line-height: 1.45; }
+.modal-message:empty { display: none; }
+.modal-fields { display: flex; flex-direction: column; gap: 10px; margin-bottom: 6px; }
+.modal-fields:empty { margin-bottom: 0; }
+.modal-field-label {
+  font-size: 12px;
+  color: var(--hint);
+  font-weight: 500;
+  margin-bottom: 4px;
+  display: block;
+}
+.modal-actions { display: flex; gap: 8px; margin-top: 10px; }
+.modal-actions .secondary-btn, .modal-actions .primary-btn { width: auto; flex: 1; }
+.modal-actions .primary-btn.danger { background: var(--danger); }
+
+/* ---------- Ruxsat yo'q ekrani ---------- */
+#screen-blocked { justify-content: center; }

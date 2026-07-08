@@ -14,8 +14,9 @@
   <!-- 0-EKRAN: Ruxsat yo'q -->
   <section id="screen-blocked" class="screen">
     <div class="success-box">
-      <span class="success-icon">⛔️</span>
-      <h1>ushbu bot ishlamaydi</h1>
+      <span class="state-icon state-icon--muted" data-icon="block"></span>
+      <h1>Ushbu bot ishlamaydi</h1>
+      <p class="subtitle">Sizda ushbu ilovadan foydalanish uchun ruxsat yo'q</p>
     </div>
   </section>
 
@@ -39,7 +40,9 @@
         <input type="text" id="new-user-id" class="admin-input" placeholder="Telegram user ID (masalan 123456789)" inputmode="numeric" />
         <input type="text" id="new-user-name" class="admin-input" placeholder="Ism (ixtiyoriy)" />
         <label class="admin-checkbox"><input type="checkbox" id="new-user-superadmin" /> Superadmin huquqi</label>
-        <button id="btn-add-user" class="primary-btn">➕ Qo'shish</button>
+        <button id="btn-add-user" class="primary-btn">
+          <span class="btn-icon" data-icon="plus"></span> Qo'shish
+        </button>
       </div>
       <div id="users-list" class="admin-list"></div>
     </div>
@@ -49,7 +52,9 @@
       <div class="admin-add-box">
         <h2>Yangi filial qo'shish</h2>
         <input type="text" id="new-filial-name" class="admin-input" placeholder="Filial nomi" />
-        <button id="btn-add-filial" class="primary-btn">➕ Qo'shish</button>
+        <button id="btn-add-filial" class="primary-btn">
+          <span class="btn-icon" data-icon="plus"></span> Qo'shish
+        </button>
       </div>
       <div id="filials-list" class="admin-list"></div>
     </div>
@@ -57,7 +62,9 @@
     <!-- Hisobot rejimi -->
     <div id="admin-tab-report" class="admin-tab-content">
       <p class="subtitle">Superadmin sifatida ham oddiy hisobot yubora olasiz.</p>
-      <button id="btn-goto-report" class="primary-btn">📷 Hisobot yuborish</button>
+      <button id="btn-goto-report" class="primary-btn">
+        <span class="btn-icon" data-icon="camera"></span> Hisobot yuborish
+      </button>
     </div>
   </section>
 
@@ -68,7 +75,9 @@
       <p class="subtitle">Hisobot qaysi filial uchun</p>
     </div>
     <div id="admin-back-bar" class="hidden">
-      <button id="btn-back-to-admin" class="secondary-btn">⚙️ Admin panelga qaytish</button>
+      <button id="btn-back-to-admin" class="secondary-btn">
+        <span class="btn-icon" data-icon="settings"></span> Admin panelga qaytish
+      </button>
     </div>
     <div id="filial-list" class="filial-list"></div>
   </section>
@@ -88,7 +97,7 @@
   <!-- 3-EKRAN: Muvaffaqiyat -->
   <section id="screen-success" class="screen">
     <div class="success-box">
-      <span class="success-icon">✅</span>
+      <span class="state-icon state-icon--accent" data-icon="check"></span>
       <h1>Yuborildi!</h1>
       <p class="subtitle">Barcha rasmlar tegishli filial bo'limiga yetkazildi. Rahmat!</p>
       <button id="btn-close" class="primary-btn">Yopish</button>
@@ -103,6 +112,21 @@
 <div id="overlay-loading" class="overlay hidden">
   <div class="spinner"></div>
   <p id="loading-text">Yuborilmoqda...</p>
+</div>
+
+<!-- Universal modal: Telegram WebView ichida window.alert/confirm/prompt
+     ishonchli ishlamaydi, shu sabab barcha tasdiqlash/tahrirlash
+     dialoglari shu komponent orqali chiqadi. -->
+<div id="modal-overlay" class="modal-overlay hidden">
+  <div class="modal-box">
+    <h3 id="modal-title" class="modal-title"></h3>
+    <p id="modal-message" class="modal-message"></p>
+    <div id="modal-fields" class="modal-fields"></div>
+    <div class="modal-actions">
+      <button id="modal-cancel" class="secondary-btn">Bekor qilish</button>
+      <button id="modal-confirm" class="primary-btn">OK</button>
+    </div>
+  </div>
 </div>
 
 <script src="app.js"></script>
