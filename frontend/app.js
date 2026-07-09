@@ -27,6 +27,7 @@ const ICONS = {
   settings: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2.8"/><path d="M19.4 13.5a1.8 1.8 0 0 0 .36 1.98l.06.06a2.16 2.16 0 1 1-3.06 3.06l-.06-.06a1.8 1.8 0 0 0-1.98-.36 1.8 1.8 0 0 0-1.1 1.65V20a2.16 2.16 0 1 1-4.32 0v-.1a1.8 1.8 0 0 0-1.18-1.65 1.8 1.8 0 0 0-1.98.36l-.06.06a2.16 2.16 0 1 1-3.06-3.06l.06-.06a1.8 1.8 0 0 0 .36-1.98 1.8 1.8 0 0 0-1.65-1.1H2a2.16 2.16 0 1 1 0-4.32h.1a1.8 1.8 0 0 0 1.65-1.18 1.8 1.8 0 0 0-.36-1.98l-.06-.06A2.16 2.16 0 1 1 6.4 3.15l.06.06a1.8 1.8 0 0 0 1.98.36h.09A1.8 1.8 0 0 0 9.63 1.9V1.8a2.16 2.16 0 1 1 4.32 0v.1a1.8 1.8 0 0 0 1.1 1.65 1.8 1.8 0 0 0 1.98-.36l.06-.06a2.16 2.16 0 1 1 3.06 3.06l-.06.06a1.8 1.8 0 0 0-.36 1.98v.09c.28.72.94 1.22 1.72 1.24h.1a2.16 2.16 0 1 1 0 4.32h-.1a1.8 1.8 0 0 0-1.65 1.1Z"/></svg>`,
   block: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="8.5"/><path d="M6.2 6.2l11.6 11.6" stroke-linecap="round"/></svg>`,
   crown: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8l3.2 3.2L12 6l4.8 5.2L20 8l-1.4 9.5H5.4Z"/><path d="M5.4 20h13.2"/></svg>`,
+  link: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 15l6-6"/><path d="M10.5 7.5l1-1a3.5 3.5 0 0 1 5 5l-1 1"/><path d="M13.5 16.5l-1 1a3.5 3.5 0 0 1-5-5l1-1"/></svg>`,
 };
 
 function iconMarkup(name) {
@@ -540,15 +541,17 @@ async function loadAdminFilials() {
       el.innerHTML = `
         <div class="admin-list-main">
           <div class="admin-list-title">${f.name} ${f.is_active ? "" : `<span class="badge-text">nofaol</span>`}</div>
-          <div class="admin-list-sub">ID: ${f.id}</div>
+          <div class="admin-list-sub">ID: ${f.id} · Topic: ${f.thread_id ? `#${f.thread_id}` : "bog'lanmagan"}</div>
         </div>
         <div class="admin-list-actions">
           <button class="icon-btn active-toggle ${f.is_active ? "" : "is-off"}" data-action="toggle" aria-label="${f.is_active ? "Nofaol qilish" : "Faollashtirish"}">${iconMarkup(f.is_active ? "eye" : "eyeOff")}</button>
+          <button class="icon-btn" data-action="link" aria-label="Mavjud topicga bog'lash" title="Guruhdagi mavjud topic bilan bog'lash">${iconMarkup("link")}</button>
           <button class="icon-btn" data-action="edit" aria-label="Tahrirlash">${iconMarkup("edit")}</button>
           <button class="icon-btn danger" data-action="delete" aria-label="O'chirish">${iconMarkup("trash")}</button>
         </div>
       `;
       el.querySelector('[data-action="toggle"]').addEventListener("click", () => toggleFilialActive(f));
+      el.querySelector('[data-action="link"]').addEventListener("click", () => linkFilialThread(f));
       el.querySelector('[data-action="edit"]').addEventListener("click", () => editFilial(f));
       el.querySelector('[data-action="delete"]').addEventListener("click", () => deleteFilial(f));
       list.appendChild(el);
@@ -580,6 +583,40 @@ document.getElementById("btn-add-filial").addEventListener("click", async () => 
     hideLoading();
   }
 });
+
+async function linkFilialThread(f) {
+  const result = await showPrompt({
+    title: "Mavjud topicga bog'lash",
+    confirmText: "Bog'lash",
+    fields: [
+      {
+        id: "thread_id",
+        label: "Topic (thread) ID raqami",
+        value: f.thread_id || "",
+      },
+    ],
+  });
+  if (!result || !result.thread_id) return;
+
+  const threadId = parseInt(result.thread_id, 10);
+  if (!Number.isInteger(threadId) || threadId <= 0) {
+    await showAlert("Topic ID musbat butun son bo'lishi kerak");
+    return;
+  }
+
+  showLoading("Bog'lanmoqda...");
+  try {
+    await adminFetch(`/api/admin/filials/${f.id}/thread`, {
+      method: "PUT",
+      body: adminForm({ thread_id: threadId }),
+    });
+    await loadAdminFilials();
+  } catch (e) {
+    await showAlert("Xatolik: " + e.message);
+  } finally {
+    hideLoading();
+  }
+}
 
 async function editFilial(f) {
   const result = await showPrompt({

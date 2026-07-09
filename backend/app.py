@@ -21,8 +21,11 @@ from fastapi import FastAPI, Form, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
 
+import asyncio
+
 import db
 import telegram_utils as tg
+import bot_listener
 
 app = FastAPI(title="Filial Feedback Mini App")
 
@@ -65,16 +68,29 @@ async def _startup():
             is_superadmin=True,
         )
 
+    # Guruhda yaratilgan (qo'lda yoki avtomatik) forum-topic'larni filiallar
+    # bilan nom bo'yicha bog'lab turadigan fon vazifasini ishga tushiramiz.
+    # Shu tufayli alohida "worker" process/Railway-service kerak bo'lmaydi —
+    # bitta web-service ichida ishlab turadi.
+    app.state.bot_listener_task = asyncio.create_task(bot_listener.run_polling())
+
+
+@app.on_event("shutdown")
+async def _shutdown():
+    task = getattr(app.state, "bot_listener_task", None)
+    if task:
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+    await db.close_pool()
+
 
 @app.get("/")
 async def health():
     # Railway health-check va domenni tekshirish uchun
     return {"status": "ok", "service": "filial-feedback-backend"}
-
-
-@app.on_event("shutdown")
-async def _shutdown():
-    await db.close_pool()
 
 
 def _check_init_data(init_data: str) -> dict:
