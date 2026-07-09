@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<title>Filial Hisobot</title>
+<title>RGS</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <link rel="stylesheet" href="style.css" />
 </head>
@@ -35,10 +35,10 @@
     </div>
 
     <div class="admin-tabs">
-      <button class="admin-tab-btn active" data-tab="admin-tab-users" data-i18n="tab_users">Userlar</button>
+      <button class="admin-tab-btn active" data-tab="admin-tab-users" data-i18n="tab_users">Adminlar</button>
       <button class="admin-tab-btn" data-tab="admin-tab-filials" data-i18n="tab_filials">Filiallar</button>
       <button class="admin-tab-btn" data-tab="admin-tab-sections" data-i18n="tab_sections">Bo'limlar</button>
-      <button class="admin-tab-btn" data-tab="admin-tab-report" data-i18n="tab_report">Hisobot rejimi</button>
+      <button class="admin-tab-btn" data-tab="admin-tab-report" data-i18n="tab_report">Filialga hisobot yuborish</button>
     </div>
 
     <!-- Userlar -->
@@ -69,11 +69,11 @@
 
     <!-- Bo'limlar (har bir chek-list turi uchun alohida) -->
     <div id="admin-tab-sections" class="admin-tab-content">
-      <p class="subtitle" data-i18n="sections_subtitle">Har bir chek-list turi uchun qaysi bo'lim (mavzu) so'ralishini shu yerdan sozlang.</p>
+      <p class="subtitle" data-i18n="sections_subtitle">Tanlang</p>
       <div id="section-checklist-subtabs" class="admin-tabs admin-subtabs"></div>
       <div class="admin-add-box">
         <h2 data-i18n="sections_add_title">Yangi bo'lim qo'shish</h2>
-        <p class="subtitle" data-i18n="sections_add_hint">Nomni joriy tanlangan tilda kiriting — tizim boshqa 2 tilga avtomatik tarjima qiladi.</p>
+        <p class="subtitle" data-i18n="sections_add_hint">Nomni joriy tanlangan tilda kiriting!</p>
         <input type="text" id="new-section-name" class="admin-input" data-i18n-placeholder="sections_name_placeholder" placeholder="Bo'lim nomi (masalan: Fasad fotosi)" />
         <button id="btn-add-section" class="primary-btn">
           <span class="btn-icon" data-icon="plus"></span><span data-i18n="btn_add">Qo'shish</span>
