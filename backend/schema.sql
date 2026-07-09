@@ -313,3 +313,101 @@ ALTER TABLE sections ALTER COLUMN checklist_type_id SET NOT NULL;
 ALTER TABLE submissions ADD COLUMN IF NOT EXISTS checklist_type_id INTEGER
     REFERENCES checklist_types(id) ON DELETE SET NULL;
 ALTER TABLE submissions ADD COLUMN IF NOT EXISTS checklist_type_name_snapshot TEXT;
+
+-- ============================================================
+--  KO'P TILLI NOMLAR (uz / ru / en)
+--  Muammo: foydalanuvchi ilovada Rus (yoki Ingliz) tilini tanlasa ham,
+--  "Smena ochilishi/topshirilishi/yopilishi" va bo'limlar (sections)
+--  nomlari bazada faqat BITTA tilda saqlangani uchun har doim o'sha bir
+--  tilda ko'rinar edi — hattoki Telegram guruh-topic'ga yuborilgan
+--  hisobot matnida ham. Yechim: har ikkala jadvalga name_uz/name_ru/
+--  name_en ustunlari qo'shiladi, backend so'rov paytida foydalanuvchi
+--  tanlagan tilga mos ustunni tanlab qaytaradi (fallback bilan), va bu
+--  xuddi shu localized nom Telegram topic'iga yuboriladigan xabar
+--  matnida ham ishlatiladi.
+-- ============================================================
+ALTER TABLE checklist_types ADD COLUMN IF NOT EXISTS name_uz TEXT;
+ALTER TABLE checklist_types ADD COLUMN IF NOT EXISTS name_ru TEXT;
+ALTER TABLE checklist_types ADD COLUMN IF NOT EXISTS name_en TEXT;
+
+ALTER TABLE sections ADD COLUMN IF NOT EXISTS name_uz TEXT;
+ALTER TABLE sections ADD COLUMN IF NOT EXISTS name_ru TEXT;
+ALTER TABLE sections ADD COLUMN IF NOT EXISTS name_en TEXT;
+
+-- checklist_types uchun 3 ta turdagi nom har doim ma'lum (key orqali
+-- aniq belgilanadi), shuning uchun har safar xavfsiz to'ldirilishi
+-- (faqat bo'sh joylarni) mumkin — schema_migrations bilan qulflanmagan.
+UPDATE checklist_types SET name_uz = 'Smena ochilishi'      WHERE key = 'opening'  AND name_uz IS NULL;
+UPDATE checklist_types SET name_ru = 'Открытие смены'        WHERE key = 'opening'  AND name_ru IS NULL;
+UPDATE checklist_types SET name_en = 'Shift opening'         WHERE key = 'opening'  AND name_en IS NULL;
+
+UPDATE checklist_types SET name_uz = 'Smena topshirilishi'   WHERE key = 'handover' AND name_uz IS NULL;
+UPDATE checklist_types SET name_ru = 'Передача смены'        WHERE key = 'handover' AND name_ru IS NULL;
+UPDATE checklist_types SET name_en = 'Shift handover'        WHERE key = 'handover' AND name_en IS NULL;
+
+UPDATE checklist_types SET name_uz = 'Smena yopilishi'       WHERE key = 'closing'  AND name_uz IS NULL;
+UPDATE checklist_types SET name_ru = 'Закрытие смены'        WHERE key = 'closing'  AND name_ru IS NULL;
+UPDATE checklist_types SET name_en = 'Shift closing'         WHERE key = 'closing'  AND name_en IS NULL;
+
+-- Boshlang'ich 8 ta bo'lim (avval faqat ruscha `name`da saqlangan) uchun
+-- sifatli uch tilli tarjimalar. name_ru bo'sh bo'lgan joyda eski `name`
+-- ustunidan ko'chiriladi (umumiy fallback), so'ng ma'lum matnlar uchun
+-- aniq uz/en tarjimalari qo'yiladi.
+UPDATE sections SET name_ru = name WHERE name_ru IS NULL;
+
+UPDATE sections SET
+    name_uz = 'Tashqi hudud va fasad fotosi',
+    name_en = 'Photo of the exterior area and facade'
+WHERE name_ru = 'Фото внешней территории и фасада' AND name_uz IS NULL;
+
+UPDATE sections SET
+    name_uz = 'Zal va hojatxonalar fotosi',
+    name_en = 'Photo of the dining hall and restrooms'
+WHERE name_ru = 'Фото зала и туалетов' AND name_uz IS NULL;
+
+UPDATE sections SET
+    name_uz = 'Peshtaxta (prilavka) fotosi',
+    name_en = 'Photo of the counter'
+WHERE name_ru = 'Фото прилавка' AND name_uz IS NULL;
+
+UPDATE sections SET
+    name_uz = 'Oshxona fotosi (1. Pitsa stansiyasi, 2. Vok stansiyasi, 3. Burger va rolls yig''ish stansiyasi, 4. Panirovka stansiyasi, 5. Fri stansiyasi, 6. Yuvish stansiyasi va mop zonalari)',
+    name_en = 'Kitchen photo (1. Pizza station, 2. Wok station, 3. Burger & rolls assembly station, 4. Breading station, 5. Fries station, 6. Washing station and mop areas)'
+WHERE name_ru = 'Фото кухни (1. Станция пиццы, 2. Станция Вок, 3. Станция сборки бургеров и роллов, 4. Панировочная станция, 5. Станция фри, 6. Станция мойки и моповые зоны)' AND name_uz IS NULL;
+
+UPDATE sections SET
+    name_uz = 'Xizmat xonasi fotosi',
+    name_en = 'Photo of the staff/service room'
+WHERE name_ru = 'Фото служебного помещения' AND name_uz IS NULL;
+
+UPDATE sections SET
+    name_uz = 'Yetkazib berish xonalari fotosi',
+    name_en = 'Photo of the delivery rooms'
+WHERE name_ru = 'Фото доставочных помещений' AND name_uz IS NULL;
+
+UPDATE sections SET
+    name_uz = 'Beshminutka va jamoa taxtasidan keyingi xodimlar fotosi (faqat ertalab)',
+    name_en = 'Photo of staff after the 5-minute briefing and team board (morning only)'
+WHERE name_ru = 'Фото сотрудников после пятиминутки и командной доски (только утром)' AND name_uz IS NULL;
+
+UPDATE sections SET
+    name_uz = 'Chek-listlar fotosi: Tozalik chek-listi, MS chek-listi, KLN, GSU tozalash blankasi (11:00, 15:00, 18:00, 21:00, Smena yopilishi)',
+    name_en = 'Checklist photos: Cleanliness checklist, MS checklist, KLN, GSU cleaning form (11:00, 15:00, 18:00, 21:00, Shift closing)'
+WHERE name_ru = 'Фото чек-листов: Чек-лист Чистоты, Чек-лист МС, КЛН, Бланк уборки ГСУ (11:00, 15:00, 18:00, 21:00, Закрытие смены)' AND name_uz IS NULL;
+
+-- Yuqoridagi 8 tadan tashqarida qolgan har qanday eski bo'lim (masalan
+-- admin panel orqali oldin qo'shilgan, faqat bitta tilda) uchun oxirgi
+-- fallback: bo'sh qolgan uz/en ustunlarini eski `name` qiymati bilan
+-- to'ldiramiz — shu bilan hech bir bo'lim nomsiz qolib ketmaydi (aks
+-- holda o'sha til tanlanganda bo'lim nomi bo'sh ko'rinardi).
+UPDATE sections SET name_uz = name WHERE name_uz IS NULL;
+UPDATE sections SET name_en = name WHERE name_en IS NULL;
+UPDATE checklist_types SET name_ru = name_uz WHERE name_ru IS NULL;
+UPDATE checklist_types SET name_en = name_uz WHERE name_en IS NULL;
+
+-- Bo'lim nomlari endi 3 ta alohida til ustunida saqlanadi, shuning uchun
+-- eski global "bitta tildagi nom noyob bo'lishi kerak" cheklovi endi
+-- ma'noni yo'qotdi (masalan bitta bo'lim uz/ru/en bo'yicha turlicha
+-- uzunlikda bo'lishi mumkin, lekin ayni checklist ichida takrorlanmasligi
+-- muhim emas — admin buni o'zi nazorat qiladi).
+DROP INDEX IF EXISTS sections_name_per_checklist_unique;

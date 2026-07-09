@@ -34,6 +34,23 @@ function iconMarkup(name) {
   return `<span class="icon">${ICONS[name] || ""}</span>`;
 }
 
+// Admin panelda checklist_types/sections xom holda (name_uz/name_ru/
+// name_en) keladi — shu yordamchi joriy tanlangan tilga mos nomni
+// backenddagi bilan bir xil fallback tartibida tanlaydi (avval joriy
+// til, keyin ru->uz->en tartibida zaxira).
+const LANG_FALLBACK_ORDER = {
+  uz: ["name_uz", "name_ru", "name_en"],
+  ru: ["name_ru", "name_uz", "name_en"],
+  en: ["name_en", "name_ru", "name_uz"],
+};
+function pickLocalized(obj) {
+  const order = LANG_FALLBACK_ORDER[getLang()] || LANG_FALLBACK_ORDER.uz;
+  for (const key of order) {
+    if (obj[key]) return obj[key];
+  }
+  return obj.name || "";
+}
+
 // Statik HTML ichidagi [data-icon] belgilangan joylarni to'ldiramiz
 function renderStaticIcons() {
   document.querySelectorAll("[data-icon]").forEach((el) => {
@@ -166,7 +183,7 @@ state.isSuperadmin = false;
 async function loadFilials() {
   showLoading(t("loading_default"));
   try {
-    const res = await fetch(`${API_BASE}/api/config?init_data=${encodeURIComponent(initData)}`);
+    const res = await fetch(`${API_BASE}/api/config?init_data=${encodeURIComponent(initData)}&lang=${getLang()}`);
 
     if (res.status === 401 || res.status === 403) {
       // Ruxsat etilmagan (whitelist'da yo'q) yoki initData yaroqsiz foydalanuvchi
@@ -243,11 +260,41 @@ document.getElementById("btn-back-to-filial").addEventListener("click", () => {
   showScreen("screen-filial");
 });
 
+// Til almashtirilganda ekranda hozir ko'rinib turgan chek-list turlari /
+// bo'limlar nomlarini yangi tilda bazadan qayta yuklaydi (bular bazada
+// har bir til uchun alohida saqlanadi, shu sabab faqat statik matnlarni
+// qayta chizish yetarli emas — backenddan yangi tilda qayta so'ralishi
+// kerak).
+async function refetchChecklistTypes() {
+  try {
+    const res = await fetch(`${API_BASE}/api/config?init_data=${encodeURIComponent(initData)}&lang=${getLang()}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    state.checklistTypes = data.checklist_types;
+  } catch (_) {}
+}
+
+async function refetchSections() {
+  if (!state.checklistType) return;
+  try {
+    const res = await fetch(
+      `${API_BASE}/api/sections?init_data=${encodeURIComponent(initData)}&checklist_type_id=${state.checklistType.id}&lang=${getLang()}`
+    );
+    if (!res.ok) return;
+    const data = await res.json();
+    // section.id lar o'zgarmaydi, faqat "name" yangi tilga almashadi —
+    // shuning uchun state.photos (section_id bo'yicha kalitlangan) va
+    // foydalanuvchi hozircha olgan rasmlar buzilmaydi.
+    state.checklistType = data.checklist_type;
+    state.sections = data.sections;
+  } catch (_) {}
+}
+
 async function selectChecklistType(checklistType) {
   showLoading(t("loading_default"));
   try {
     const res = await fetch(
-      `${API_BASE}/api/sections?init_data=${encodeURIComponent(initData)}&checklist_type_id=${checklistType.id}`
+      `${API_BASE}/api/sections?init_data=${encodeURIComponent(initData)}&checklist_type_id=${checklistType.id}&lang=${getLang()}`
     );
     if (!res.ok) throw new Error(await res.text());
     const data = await res.json();
@@ -407,6 +454,7 @@ async function submitReport() {
     formData.append("init_data", initData);
     formData.append("filial_id", state.filial.id);
     formData.append("checklist_type_id", state.checklistType.id);
+    formData.append("lang", getLang());
 
     const meta = [];
     state.sections.forEach((sec) => {
@@ -775,7 +823,7 @@ async function initAdminSections() {
     types.forEach((ct) => {
       const btn = document.createElement("button");
       btn.className = "admin-tab-btn" + (ct.id === adminSelectedChecklistTypeId ? " active" : "");
-      btn.textContent = `${CHECKLIST_TYPE_EMOJI[ct.key] || "📋"} ${ct.name}`;
+      btn.textContent = `${CHECKLIST_TYPE_EMOJI[ct.key] || "📋"} ${pickLocalized(ct)}`;
       btn.addEventListener("click", () => {
         adminSelectedChecklistTypeId = ct.id;
         subtabsEl.querySelectorAll(".admin-tab-btn").forEach((b) => b.classList.remove("active"));
@@ -808,7 +856,8 @@ async function loadAdminSections() {
       el.className = "admin-list-item" + (s.is_active ? "" : " is-inactive");
       el.innerHTML = `
         <div class="admin-list-main">
-          <div class="admin-list-title">${s.name} ${s.is_active ? "" : `<span class="badge-text">${t("inactive_badge")}</span>`}</div>
+          <div class="admin-list-title">${pickLocalized(s)} ${s.is_active ? "" : `<span class="badge-text">${t("inactive_badge")}</span>`}</div>
+          <div class="admin-list-sub">UZ: ${s.name_uz || "—"} · RU: ${s.name_ru || "—"} · EN: ${s.name_en || "—"}</div>
         </div>
         <div class="admin-list-actions">
           <button class="icon-btn active-toggle ${s.is_active ? "" : "is-off"}" data-action="toggle" aria-label="${s.is_active ? t("toggle_deactivate_label") : t("toggle_activate_label")}">${iconMarkup(s.is_active ? "eye" : "eyeOff")}</button>
@@ -827,9 +876,13 @@ async function loadAdminSections() {
 }
 
 document.getElementById("btn-add-section").addEventListener("click", async () => {
-  const nameInput = document.getElementById("new-section-name");
-  const name = nameInput.value.trim();
-  if (!name) {
+  const nameUzInput = document.getElementById("new-section-name-uz");
+  const nameRuInput = document.getElementById("new-section-name-ru");
+  const nameEnInput = document.getElementById("new-section-name-en");
+  const nameUz = nameUzInput.value.trim();
+  const nameRu = nameRuInput.value.trim();
+  const nameEn = nameEnInput.value.trim();
+  if (!nameUz && !nameRu && !nameEn) {
     await showAlert(t("sections_name_required"));
     return;
   }
@@ -842,9 +895,16 @@ document.getElementById("btn-add-section").addEventListener("click", async () =>
   try {
     await adminFetch("/api/admin/sections", {
       method: "POST",
-      body: adminForm({ name, checklist_type_id: adminSelectedChecklistTypeId }),
+      body: adminForm({
+        name_uz: nameUz,
+        name_ru: nameRu,
+        name_en: nameEn,
+        checklist_type_id: adminSelectedChecklistTypeId,
+      }),
     });
-    nameInput.value = "";
+    nameUzInput.value = "";
+    nameRuInput.value = "";
+    nameEnInput.value = "";
     await loadAdminSections();
   } catch (e) {
     await showAlert(t("error_prefix") + e.message);
@@ -857,15 +917,28 @@ async function editSection(s) {
   const result = await showPrompt({
     title: t("sections_edit_title"),
     confirmText: t("btn_save"),
-    fields: [{ id: "name", label: t("sections_name_label"), value: s.name }],
+    fields: [
+      { id: "name_uz", label: t("sections_name_uz_label"), value: s.name_uz || "" },
+      { id: "name_ru", label: t("sections_name_ru_label"), value: s.name_ru || "" },
+      { id: "name_en", label: t("sections_name_en_label"), value: s.name_en || "" },
+    ],
   });
-  if (!result || !result.name) return;
+  if (!result) return;
+  if (!result.name_uz && !result.name_ru && !result.name_en) {
+    await showAlert(t("sections_name_required"));
+    return;
+  }
 
   showLoading(t("loading_saving"));
   try {
     await adminFetch(`/api/admin/sections/${s.id}`, {
       method: "PUT",
-      body: adminForm({ name: result.name, is_active: s.is_active }),
+      body: adminForm({
+        name_uz: result.name_uz,
+        name_ru: result.name_ru,
+        name_en: result.name_en,
+        is_active: s.is_active,
+      }),
     });
     await loadAdminSections();
   } catch (e) {
@@ -879,8 +952,8 @@ async function toggleSectionActive(s) {
   const makingInactive = s.is_active;
   const ok = await showConfirm(
     makingInactive
-      ? t("sections_toggle_off_confirm", { name: s.name })
-      : t("sections_toggle_on_confirm", { name: s.name }),
+      ? t("sections_toggle_off_confirm", { name: pickLocalized(s) })
+      : t("sections_toggle_on_confirm", { name: pickLocalized(s) }),
     {
       title: makingInactive ? t("sections_toggle_off_title") : t("sections_toggle_on_title"),
       confirmText: makingInactive ? t("toggle_deactivate_label") : t("toggle_activate_label"),
@@ -904,7 +977,7 @@ async function toggleSectionActive(s) {
 
 async function deleteSection(s) {
   const ok = await showConfirm(
-    t("sections_delete_confirm", { name: s.name }),
+    t("sections_delete_confirm", { name: pickLocalized(s) }),
     { title: t("sections_delete_title"), confirmText: t("btn_delete_permanent"), danger: true }
   );
   if (!ok) return;
@@ -926,18 +999,29 @@ async function deleteSection(s) {
 //  Til o'zgarganda joriy ekrandagi dinamik matnlarni yangilash
 //  (statik matnlar i18n.js tomonidan avtomatik yangilanadi)
 // ============================================================
-function onLangChange() {
+async function onLangChange() {
   const activeScreen = document.querySelector(".screen.active");
   const activeId = activeScreen ? activeScreen.id : null;
 
   if (activeId === "screen-checklist") {
+    await refetchChecklistTypes();
     renderChecklistTypes();
   } else if (activeId === "screen-sections") {
+    await refetchSections();
+    if (state.checklistType) {
+      document.getElementById("checklist-name-subtitle").textContent =
+        `${CHECKLIST_TYPE_EMOJI[state.checklistType.key] || "📋"} ${state.checklistType.name}`;
+    }
     renderSections();
   } else if (activeId === "screen-admin") {
     loadAdminUsers();
     loadAdminFilials();
     initAdminSections();
+  } else if (activeId === "screen-filial") {
+    // Chek-list turlari keshini fonda yangilab qo'yamiz, shunda
+    // foydalanuvchi filialni tanlaganda keyingi ekran to'g'ri tilda
+    // ochiladi.
+    refetchChecklistTypes();
   }
 
   // MainButton matnini yangilash (agar hozir ko'rsatilayotgan bo'lsa)

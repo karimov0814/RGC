@@ -40,6 +40,15 @@ SUPERADMIN_IDS = [
 
 NOT_ALLOWED_MESSAGE = "ushbu bot ishlamaydi"
 
+# Frontenddagi i18n.js bilan bir xil ro'yxat — foydalanuvchi tanlagan til
+# har doim shu 3 tadan biriga tushishini kafolatlaydi (aks holda "uz"ga
+# tushiladi).
+SUPPORTED_LANGS = {"uz", "ru", "en"}
+
+
+def _norm_lang(lang: Optional[str]) -> str:
+    return lang if lang in SUPPORTED_LANGS else "uz"
+
 # Mini app boshqa domenda joylashgan bo'lishi mumkin (masalan GitHub Pages / Railway static)
 app.add_middleware(
     CORSMiddleware,
@@ -130,10 +139,11 @@ async def _check_superadmin(init_data: str) -> dict:
 #    quyidagi /api/sections ga qarang)
 # ---------------------------------------------------------------------------
 @app.get("/api/config")
-async def get_config(init_data: str):
+async def get_config(init_data: str, lang: str = "uz"):
+    lang = _norm_lang(lang)
     user = await _check_auth(init_data)
     filials = await db.list_active_filials()
-    checklist_types = await db.list_active_checklist_types()
+    checklist_types = await db.list_active_checklist_types(lang)
     return {
         "filials": filials,
         "checklist_types": checklist_types,
@@ -146,12 +156,13 @@ async def get_config(init_data: str):
 #      bo'limlar (sections) ro'yxati
 # ---------------------------------------------------------------------------
 @app.get("/api/sections")
-async def get_sections(init_data: str, checklist_type_id: int):
+async def get_sections(init_data: str, checklist_type_id: int, lang: str = "uz"):
+    lang = _norm_lang(lang)
     await _check_auth(init_data)
-    checklist_type = await db.get_checklist_type(checklist_type_id)
+    checklist_type = await db.get_checklist_type(checklist_type_id, lang)
     if not checklist_type:
         raise HTTPException(status_code=404, detail="Chek-list turi topilmadi")
-    sections = await db.list_active_sections(checklist_type_id)
+    sections = await db.list_active_sections(checklist_type_id, lang)
     return {"sections": sections, "checklist_type": checklist_type}
 
 
@@ -172,14 +183,20 @@ async def submit(
     checklist_type_id: int = Form(...),
     items_meta: str = Form(...),  # JSON: [{"section_id": 1, "field": "photo_1", "comment": "..."}]
     files: List[UploadFile] = File(...),
+    lang: str = Form("uz"),
 ):
+    lang = _norm_lang(lang)
     user = await _check_auth(init_data)
 
     filial = await db.get_filial(filial_id)
     if not filial:
         raise HTTPException(status_code=404, detail="Filial topilmadi")
 
-    checklist_type = await db.get_checklist_type(checklist_type_id)
+    # E'TIBOR: checklist_type['name'] shu yerda TANLANGAN TILDA (lang)
+    # olinadi — shunda Telegram topic'iga yuboriladigan xabar sarlavhasi
+    # ham foydalanuvchi ilovada tanlagan til bilan bir xil bo'ladi, front-
+    # enddan kelgan matnga ishonib o'tirilmaydi (xavfsizroq va izchil).
+    checklist_type = await db.get_checklist_type(checklist_type_id, lang)
     if not checklist_type:
         raise HTTPException(status_code=404, detail="Chek-list turi topilmadi")
 
@@ -239,14 +256,20 @@ async def submit(
     section_groups: dict[int, dict] = {}
     for item, upload in zip(meta, files):
         section_id = item["section_id"]
-        group = section_groups.setdefault(section_id, {
-            "section_name": item.get("section_name", ""),
-            "items": [],
-        })
+        group = section_groups.setdefault(section_id, {"items": []})
         group["items"].append((item, upload))
 
+    # Bo'lim nomlarini FRONTENDDAN kelgan matnga ishonib emas, bazadan
+    # TANLANGAN TILDA (lang) qayta o'qib olamiz — shunda Telegram
+    # topic'iga yuboriladigan "📍 Bo'lim: ..." qatori ham har doim
+    # foydalanuvchi ilovada tanlagan til bilan bir xil bo'ladi.
+    section_names: dict[int, str] = {}
+    for section_id in section_groups:
+        sec = await db.get_section(section_id, lang)
+        section_names[section_id] = sec["name"] if sec else ""
+
     for section_id, group in section_groups.items():
-        section_name = group["section_name"]
+        section_name = section_names.get(section_id, "")
         items = group["items"]
 
         # Bo'lim uchun izoh — barcha rasmlar bitta umumiy izohni ishlatadi
@@ -445,19 +468,18 @@ async def admin_list_sections(init_data: str, checklist_type_id: int):
 async def admin_add_section(
     init_data: str = Form(...),
     checklist_type_id: int = Form(...),
-    name: str = Form(...),
+    name_uz: str = Form(""),
+    name_ru: str = Form(""),
+    name_en: str = Form(""),
 ):
     await _check_superadmin(init_data)
-    name = name.strip()
-    if not name:
-        raise HTTPException(status_code=400, detail="Bo'lim nomi bo'sh bo'lishi mumkin emas")
+    name_uz, name_ru, name_en = name_uz.strip(), name_ru.strip(), name_en.strip()
+    if not (name_uz or name_ru or name_en):
+        raise HTTPException(status_code=400, detail="Kamida bitta til uchun bo'lim nomini kiriting")
     checklist_type = await db.get_checklist_type(checklist_type_id)
     if not checklist_type:
         raise HTTPException(status_code=404, detail="Chek-list turi topilmadi")
-    try:
-        section = await db.create_section(checklist_type_id, name)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Bu nomda bo'lim allaqachon mavjud")
+    section = await db.create_section(checklist_type_id, name_uz, name_ru, name_en)
     return {"ok": True, "section": section}
 
 
@@ -465,17 +487,16 @@ async def admin_add_section(
 async def admin_update_section(
     section_id: int,
     init_data: str = Form(...),
-    name: str = Form(...),
+    name_uz: str = Form(""),
+    name_ru: str = Form(""),
+    name_en: str = Form(""),
     is_active: bool = Form(True),
 ):
     await _check_superadmin(init_data)
-    name = name.strip()
-    if not name:
-        raise HTTPException(status_code=400, detail="Bo'lim nomi bo'sh bo'lishi mumkin emas")
-    try:
-        section = await db.update_section(section_id, name, is_active)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Bu nomda bo'lim allaqachon mavjud")
+    name_uz, name_ru, name_en = name_uz.strip(), name_ru.strip(), name_en.strip()
+    if not (name_uz or name_ru or name_en):
+        raise HTTPException(status_code=400, detail="Kamida bitta til uchun bo'lim nomini kiriting")
+    section = await db.update_section(section_id, name_uz, name_ru, name_en, is_active)
     if not section:
         raise HTTPException(status_code=404, detail="Bo'lim topilmadi")
     return {"ok": True, "section": section}

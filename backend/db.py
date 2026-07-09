@@ -9,6 +9,26 @@ DATABASE_URL = os.environ["DATABASE_URL"]  # masalan: postgresql://user:pass@loc
 
 _pool: Optional[asyncpg.Pool] = None
 
+# ---------- Ko'p tillilik (uz / ru / en) uchun umumiy yordamchi ----------
+# Har bir til uchun "afzal ko'rilgan ustun -> zaxira ustunlar" tartibi.
+# Masalan foydalanuvchi Rus tilini tanlagan bo'lsa, avval name_ru ga
+# qaraladi; agar u to'ldirilmagan bo'lsa (masalan admin faqat o'zbekcha
+# nom kiritgan bo'lsa), name_uz ga, so'ng name_en ga tushiladi — shu
+# bilan bo'lim/chek-list turi hech qachon bo'sh nomsiz ko'rinmaydi.
+_LANG_FALLBACK_ORDER = {
+    "uz": ["name_uz", "name_ru", "name_en"],
+    "ru": ["name_ru", "name_uz", "name_en"],
+    "en": ["name_en", "name_ru", "name_uz"],
+}
+
+
+def _localized_name(row: dict, lang: str) -> str:
+    for col in _LANG_FALLBACK_ORDER.get(lang, _LANG_FALLBACK_ORDER["uz"]):
+        val = row.get(col)
+        if val:
+            return val
+    return row.get("name") or ""
+
 
 async def get_pool() -> asyncpg.Pool:
     global _pool
@@ -203,50 +223,70 @@ async def set_filial_active(filial_id: int, is_active: bool) -> Optional[dict]:
 
 # ---------- Chek-list turlari (Ochilish / Topshirish / Yopilish) ----------
 
-async def list_active_checklist_types():
+async def list_active_checklist_types(lang: str = "uz"):
     pool = await get_pool()
     rows = await pool.fetch(
-        "SELECT id, key, name FROM checklist_types WHERE is_active = TRUE ORDER BY sort_order, id"
+        "SELECT id, key, name_uz, name_ru, name_en FROM checklist_types "
+        "WHERE is_active = TRUE ORDER BY sort_order, id"
     )
-    return [dict(r) for r in rows]
+    result = []
+    for r in rows:
+        d = dict(r)
+        d["name"] = _localized_name(d, lang)
+        result.append(d)
+    return result
 
 
 async def list_all_checklist_types():
+    """Admin panel uchun — barcha 3 til qatorlari xom holda qaytariladi
+    (tahrirlash uchun), 'name' maydoni hisoblanmaydi."""
     pool = await get_pool()
     rows = await pool.fetch(
-        "SELECT id, key, name, sort_order, is_active FROM checklist_types ORDER BY sort_order, id"
+        "SELECT id, key, name_uz, name_ru, name_en, sort_order, is_active "
+        "FROM checklist_types ORDER BY sort_order, id"
     )
     return [dict(r) for r in rows]
 
 
-async def get_checklist_type(checklist_type_id: int):
+async def get_checklist_type(checklist_type_id: int, lang: str = "uz"):
     pool = await get_pool()
     row = await pool.fetchrow(
-        "SELECT id, key, name FROM checklist_types WHERE id = $1", checklist_type_id
+        "SELECT id, key, name_uz, name_ru, name_en FROM checklist_types WHERE id = $1",
+        checklist_type_id,
     )
-    return dict(row) if row else None
+    if not row:
+        return None
+    d = dict(row)
+    d["name"] = _localized_name(d, lang)
+    return d
 
 
 # ---------- Bo'limlar (har biri bitta chek-list turiga tegishli) ----------
 
-async def list_active_sections(checklist_type_id: int):
+async def list_active_sections(checklist_type_id: int, lang: str = "uz"):
     pool = await get_pool()
     rows = await pool.fetch(
         """
-        SELECT id, name FROM sections
+        SELECT id, name_uz, name_ru, name_en FROM sections
         WHERE is_active = TRUE AND checklist_type_id = $1
         ORDER BY sort_order, id
         """,
         checklist_type_id,
     )
-    return [dict(r) for r in rows]
+    result = []
+    for r in rows:
+        d = dict(r)
+        d["name"] = _localized_name(d, lang)
+        result.append(d)
+    return result
 
 
 async def list_all_sections(checklist_type_id: int):
+    """Admin panel uchun — barcha 3 til qatorlari xom holda qaytariladi."""
     pool = await get_pool()
     rows = await pool.fetch(
         """
-        SELECT id, name, sort_order, is_active FROM sections
+        SELECT id, name_uz, name_ru, name_en, sort_order, is_active FROM sections
         WHERE checklist_type_id = $1
         ORDER BY sort_order, id
         """,
@@ -255,28 +295,45 @@ async def list_all_sections(checklist_type_id: int):
     return [dict(r) for r in rows]
 
 
-async def create_section(checklist_type_id: int, name: str) -> dict:
+async def get_section(section_id: int, lang: str = "uz"):
     pool = await get_pool()
     row = await pool.fetchrow(
+        "SELECT id, name_uz, name_ru, name_en FROM sections WHERE id = $1", section_id
+    )
+    if not row:
+        return None
+    d = dict(row)
+    d["name"] = _localized_name(d, lang)
+    return d
+
+
+async def create_section(checklist_type_id: int, name_uz: str, name_ru: str, name_en: str) -> dict:
+    pool = await get_pool()
+    # `name` ustuni eski jadval sxemasidan meros (hali NOT NULL) — birinchi
+    # to'ldirilgan tildagi nom bilan to'ldiramiz, lekin logikada endi
+    # ishlatilmaydi (uning o'rniga name_uz/ru/en ishlatiladi).
+    legacy_name = name_uz or name_ru or name_en
+    row = await pool.fetchrow(
         """
-        INSERT INTO sections (name, checklist_type_id)
-        VALUES ($1, $2)
-        RETURNING id, name, sort_order, is_active
+        INSERT INTO sections (name, name_uz, name_ru, name_en, checklist_type_id)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING id, name_uz, name_ru, name_en, sort_order, is_active
         """,
-        name, checklist_type_id,
+        legacy_name, name_uz or None, name_ru or None, name_en or None, checklist_type_id,
     )
     return dict(row)
 
 
-async def update_section(section_id: int, name: str, is_active: bool) -> Optional[dict]:
+async def update_section(section_id: int, name_uz: str, name_ru: str, name_en: str, is_active: bool) -> Optional[dict]:
     pool = await get_pool()
+    legacy_name = name_uz or name_ru or name_en
     row = await pool.fetchrow(
         """
-        UPDATE sections SET name = $2, is_active = $3
+        UPDATE sections SET name = $2, name_uz = $3, name_ru = $4, name_en = $5, is_active = $6
         WHERE id = $1
-        RETURNING id, name, sort_order, is_active
+        RETURNING id, name_uz, name_ru, name_en, sort_order, is_active
         """,
-        section_id, name, is_active,
+        section_id, legacy_name, name_uz or None, name_ru or None, name_en or None, is_active,
     )
     return dict(row) if row else None
 
@@ -299,7 +356,7 @@ async def set_section_active(section_id: int, is_active: bool) -> Optional[dict]
         """
         UPDATE sections SET is_active = $2
         WHERE id = $1
-        RETURNING id, name, sort_order, is_active
+        RETURNING id, name_uz, name_ru, name_en, sort_order, is_active
         """,
         section_id, is_active,
     )
