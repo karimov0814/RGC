@@ -337,12 +337,34 @@ html, body {
   cursor: pointer;
 }
 
+.back-btn { margin-bottom: 14px; }
+
 /* ---------- Admin panel ---------- */
 .admin-tabs {
   display: flex;
   gap: 2px;
   margin-bottom: 20px;
   border-bottom: 1px solid var(--line);
+}
+
+/* Bo'limlar tabidagi ichki chek-list turi tanlovi (kichikroq, pill ko'rinish) */
+.admin-subtabs {
+  border-bottom: none;
+  gap: 6px;
+  margin-bottom: 4px;
+  flex-wrap: wrap;
+}
+.admin-subtabs .admin-tab-btn {
+  flex: none;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  padding: 7px 14px;
+  margin-bottom: 0;
+}
+.admin-subtabs .admin-tab-btn.active {
+  background: var(--text);
+  color: var(--bg, #fff);
+  border-color: var(--text);
 }
 .admin-tab-btn {
   flex: 1;

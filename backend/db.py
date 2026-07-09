@@ -201,26 +201,123 @@ async def set_filial_active(filial_id: int, is_active: bool) -> Optional[dict]:
     return dict(row) if row else None
 
 
-# ---------- Bo'limlar ----------
+# ---------- Chek-list turlari (Ochilish / Topshirish / Yopilish) ----------
 
-async def list_active_sections():
+async def list_active_checklist_types():
     pool = await get_pool()
     rows = await pool.fetch(
-        "SELECT id, name FROM sections WHERE is_active = TRUE ORDER BY sort_order, id"
+        "SELECT id, key, name FROM checklist_types WHERE is_active = TRUE ORDER BY sort_order, id"
     )
     return [dict(r) for r in rows]
 
 
-# ---------- Submissionlar ----------
+async def list_all_checklist_types():
+    pool = await get_pool()
+    rows = await pool.fetch(
+        "SELECT id, key, name, sort_order, is_active FROM checklist_types ORDER BY sort_order, id"
+    )
+    return [dict(r) for r in rows]
 
-async def create_submission(filial_id: int, filial_name: str, telegram_user_id: int, full_name: str) -> int:
+
+async def get_checklist_type(checklist_type_id: int):
+    pool = await get_pool()
+    row = await pool.fetchrow(
+        "SELECT id, key, name FROM checklist_types WHERE id = $1", checklist_type_id
+    )
+    return dict(row) if row else None
+
+
+# ---------- Bo'limlar (har biri bitta chek-list turiga tegishli) ----------
+
+async def list_active_sections(checklist_type_id: int):
+    pool = await get_pool()
+    rows = await pool.fetch(
+        """
+        SELECT id, name FROM sections
+        WHERE is_active = TRUE AND checklist_type_id = $1
+        ORDER BY sort_order, id
+        """,
+        checklist_type_id,
+    )
+    return [dict(r) for r in rows]
+
+
+async def list_all_sections(checklist_type_id: int):
+    pool = await get_pool()
+    rows = await pool.fetch(
+        """
+        SELECT id, name, sort_order, is_active FROM sections
+        WHERE checklist_type_id = $1
+        ORDER BY sort_order, id
+        """,
+        checklist_type_id,
+    )
+    return [dict(r) for r in rows]
+
+
+async def create_section(checklist_type_id: int, name: str) -> dict:
     pool = await get_pool()
     row = await pool.fetchrow(
         """
-        INSERT INTO submissions (filial_id, filial_name_snapshot, telegram_user_id, full_name)
-        VALUES ($1, $2, $3, $4) RETURNING id
+        INSERT INTO sections (name, checklist_type_id)
+        VALUES ($1, $2)
+        RETURNING id, name, sort_order, is_active
         """,
-        filial_id, filial_name, telegram_user_id, full_name,
+        name, checklist_type_id,
+    )
+    return dict(row)
+
+
+async def update_section(section_id: int, name: str, is_active: bool) -> Optional[dict]:
+    pool = await get_pool()
+    row = await pool.fetchrow(
+        """
+        UPDATE sections SET name = $2, is_active = $3
+        WHERE id = $1
+        RETURNING id, name, sort_order, is_active
+        """,
+        section_id, name, is_active,
+    )
+    return dict(row) if row else None
+
+
+async def delete_section(section_id: int) -> bool:
+    """Bo'limni bazadan butunlay o'chiradi. submission_photos.section_id
+    bu jadvalga FK bilan bog'langan (ON DELETE clause'siz — ya'ni RESTRICT),
+    shuning uchun agar bu bo'limda allaqachon yuborilgan rasm(lar) bo'lsa,
+    Postgres o'chirishni rad etadi (ForeignKeyViolationError). Bunday holda
+    tarixiy hisobotlarni saqlab qolish uchun admin panelda ko'z
+    (faol/nofaol) ikonkasidan foydalanish tavsiya etiladi."""
+    pool = await get_pool()
+    result = await pool.execute("DELETE FROM sections WHERE id = $1", section_id)
+    return result.endswith(" 1")
+
+
+async def set_section_active(section_id: int, is_active: bool) -> Optional[dict]:
+    pool = await get_pool()
+    row = await pool.fetchrow(
+        """
+        UPDATE sections SET is_active = $2
+        WHERE id = $1
+        RETURNING id, name, sort_order, is_active
+        """,
+        section_id, is_active,
+    )
+    return dict(row) if row else None
+
+
+# ---------- Submissionlar ----------
+
+async def create_submission(filial_id: int, filial_name: str, telegram_user_id: int, full_name: str,
+                             checklist_type_id: int | None = None, checklist_type_name: str | None = None) -> int:
+    pool = await get_pool()
+    row = await pool.fetchrow(
+        """
+        INSERT INTO submissions (filial_id, filial_name_snapshot, telegram_user_id, full_name,
+                                  checklist_type_id, checklist_type_name_snapshot)
+        VALUES ($1, $2, $3, $4, $5, $6) RETURNING id
+        """,
+        filial_id, filial_name, telegram_user_id, full_name, checklist_type_id, checklist_type_name,
     )
     return row["id"]
 

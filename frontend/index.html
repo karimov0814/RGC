@@ -30,6 +30,7 @@
     <div class="admin-tabs">
       <button class="admin-tab-btn active" data-tab="admin-tab-users">Userlar</button>
       <button class="admin-tab-btn" data-tab="admin-tab-filials">Filiallar</button>
+      <button class="admin-tab-btn" data-tab="admin-tab-sections">Bo'limlar</button>
       <button class="admin-tab-btn" data-tab="admin-tab-report">Hisobot rejimi</button>
     </div>
 
@@ -59,6 +60,20 @@
       <div id="filials-list" class="admin-list"></div>
     </div>
 
+    <!-- Bo'limlar (har bir chek-list turi uchun alohida) -->
+    <div id="admin-tab-sections" class="admin-tab-content">
+      <p class="subtitle">Har bir chek-list turi uchun qaysi bo'lim (mavzu) so'ralishini shu yerdan sozlang.</p>
+      <div id="section-checklist-subtabs" class="admin-tabs admin-subtabs"></div>
+      <div class="admin-add-box">
+        <h2>Yangi bo'lim qo'shish</h2>
+        <input type="text" id="new-section-name" class="admin-input" placeholder="Bo'lim nomi (masalan: Fasad fotosi)" />
+        <button id="btn-add-section" class="primary-btn">
+          <span class="btn-icon" data-icon="plus"></span> Qo'shish
+        </button>
+      </div>
+      <div id="sections-list" class="admin-list"></div>
+    </div>
+
     <!-- Hisobot rejimi -->
     <div id="admin-tab-report" class="admin-tab-content">
       <p class="subtitle">Superadmin sifatida ham oddiy hisobot yubora olasiz.</p>
@@ -82,10 +97,23 @@
     <div id="filial-list" class="filial-list"></div>
   </section>
 
+  <!-- 1.5-EKRAN: Chek-list turini tanlash -->
+  <section id="screen-checklist" class="screen">
+    <div class="header">
+      <h1 id="checklist-filial-title">Filial</h1>
+      <p class="subtitle">Chek-list turini tanlang</p>
+    </div>
+    <button id="btn-back-to-filial" class="secondary-btn back-btn">
+      <span class="btn-icon" data-icon="chevron" style="transform:rotate(180deg)"></span> Filialni o'zgartirish
+    </button>
+    <div id="checklist-type-list" class="filial-list"></div>
+  </section>
+
   <!-- 2-EKRAN: Bo'limlar bo'yicha rasm olish -->
   <section id="screen-sections" class="screen">
     <div class="header">
       <h1 id="filial-name-title">Filial</h1>
+      <p id="checklist-name-subtitle" class="subtitle"></p>
       <div class="progress-wrap">
         <div class="progress-bar"><div id="progress-fill" class="progress-fill"></div></div>
         <span id="progress-text" class="hint">0 / 0 bo'lim</span>

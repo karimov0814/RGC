@@ -226,3 +226,90 @@ UPDATE submissions s
 SET filial_name_snapshot = f.name
 FROM filials f
 WHERE s.filial_id = f.id AND s.filial_name_snapshot IS NULL;
+
+-- ============================================================
+--  CHEK-LIST TURLARI (Smena ochilishi / topshirilishi / yopilishi)
+-- ============================================================
+--  Filial tanlangandan keyin foydalanuvchi shu 3 turdan birini tanlaydi.
+--  Har bir tur o'zining mustaqil bo'limlar (sections) ro'yxatiga ega —
+--  admin panel orqali har bir tur uchun alohida boshqariladi. `key`
+--  ustuni doimiy/o'zgarmas identifikator (kodda ishlatiladi), `name`
+--  esa foydalanuvchiga ko'rinadigan sarlavha.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS checklist_types (
+    id          SERIAL PRIMARY KEY,
+    key         TEXT NOT NULL UNIQUE,   -- 'opening' | 'handover' | 'closing'
+    name        TEXT NOT NULL,          -- "Smena ochilishi" ...
+    sort_order  INTEGER NOT NULL DEFAULT 0,
+    is_active   BOOLEAN NOT NULL DEFAULT TRUE
+);
+
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM schema_migrations WHERE id = 'seed_checklist_types_v1') THEN
+        INSERT INTO checklist_types (key, name, sort_order, is_active) VALUES
+            ('opening',  'Smena ochilishi',     1, TRUE),
+            ('handover', 'Smena topshirilishi', 2, TRUE),
+            ('closing',  'Smena yopilishi',     3, TRUE)
+        ON CONFLICT (key) DO NOTHING;
+
+        INSERT INTO schema_migrations (id) VALUES ('seed_checklist_types_v1');
+    END IF;
+END $$;
+
+-- Bo'limlar (sections) endi har bir chek-list turiga tegishli bo'ladi.
+ALTER TABLE sections ADD COLUMN IF NOT EXISTS checklist_type_id INTEGER
+    REFERENCES checklist_types(id) ON DELETE CASCADE;
+
+-- Eski global UNIQUE(name) endi kerak emas — bir xil nomdagi bo'lim
+-- turli chek-list turlarida qayta-qayta bo'lishi mumkin bo'lishi kerak.
+DROP INDEX IF EXISTS sections_name_unique;
+CREATE UNIQUE INDEX IF NOT EXISTS sections_name_per_checklist_unique
+    ON sections (checklist_type_id, name);
+
+-- Mavjud (checklist_type_id hali NULL bo'lgan) 8 ta bo'lim — FAQAT BIR
+-- MARTA — "Smena ochilishi" turiga biriktiriladi, so'ngra xuddi shu
+-- bo'limlar "Smena topshirilishi" va "Smena yopilishi" turlari uchun
+-- ham nusxalanadi (bu 3 tasi alohida-alohida, admin panel orqali
+-- keyinchalik mustaqil tahrirlanadi).
+DO $$
+DECLARE
+    opening_id  INTEGER;
+    handover_id INTEGER;
+    closing_id  INTEGER;
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM schema_migrations WHERE id = 'assign_sections_checklist_type_v1') THEN
+        SELECT id INTO opening_id  FROM checklist_types WHERE key = 'opening';
+        SELECT id INTO handover_id FROM checklist_types WHERE key = 'handover';
+        SELECT id INTO closing_id  FROM checklist_types WHERE key = 'closing';
+
+        -- Eski (tur biriktirilmagan) bo'limlarni "Smena ochilishi"ga bog'laymiz.
+        -- Bu orqali eski submission_photos yozuvlari (section_id) buzilmaydi.
+        UPDATE sections SET checklist_type_id = opening_id
+        WHERE checklist_type_id IS NULL;
+
+        -- Xuddi shu bo'limlarni "Smena topshirilishi" va "Smena yopilishi"
+        -- uchun nusxalab qo'yamiz (yangi id'lar bilan, mustaqil qatorlar).
+        INSERT INTO sections (name, sort_order, is_active, checklist_type_id)
+        SELECT name, sort_order, is_active, handover_id
+        FROM sections WHERE checklist_type_id = opening_id
+        ON CONFLICT (checklist_type_id, name) DO NOTHING;
+
+        INSERT INTO sections (name, sort_order, is_active, checklist_type_id)
+        SELECT name, sort_order, is_active, closing_id
+        FROM sections WHERE checklist_type_id = opening_id
+        ON CONFLICT (checklist_type_id, name) DO NOTHING;
+
+        INSERT INTO schema_migrations (id) VALUES ('assign_sections_checklist_type_v1');
+    END IF;
+END $$;
+
+-- Bundan buyon checklist_type_id har doim to'ldirilgan bo'lishi shart.
+ALTER TABLE sections ALTER COLUMN checklist_type_id SET NOT NULL;
+
+-- Submissionlar endi qaysi chek-list turi uchun yuborilganini ham
+-- saqlaydi (filial kabi: tur o'chirilsa ham eski hisobot nomi
+-- snapshot orqali saqlanib qoladi).
+ALTER TABLE submissions ADD COLUMN IF NOT EXISTS checklist_type_id INTEGER
+    REFERENCES checklist_types(id) ON DELETE SET NULL;
+ALTER TABLE submissions ADD COLUMN IF NOT EXISTS checklist_type_name_snapshot TEXT;

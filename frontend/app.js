@@ -44,9 +44,11 @@ renderStaticIcons();
 
 // ---------- Holat (state) ----------
 const state = {
-  filial: null,     // {id, name}
-  sections: [],      // [{id, name}]
-  photos: {},         // section_id -> [{file, previewUrl, comment}, ...]
+  filial: null,          // {id, name}
+  checklistTypes: [],     // [{id, key, name}]
+  checklistType: null,    // {id, key, name}
+  sections: [],            // [{id, name}]
+  photos: {},               // section_id -> [{file, previewUrl, comment}, ...]
 };
 
 // ---------- Ekranlarni almashtirish ----------
@@ -167,7 +169,7 @@ async function loadFilials() {
     if (!res.ok) throw new Error(await res.text());
 
     const data = await res.json();
-    state.sections = data.sections;
+    state.checklistTypes = data.checklist_types;
     state.isSuperadmin = !!data.is_superadmin;
 
     const list = document.getElementById("filial-list");
@@ -188,6 +190,7 @@ async function loadFilials() {
       showScreen("screen-admin");
       loadAdminUsers();
       loadAdminFilials();
+      initAdminSections();
     } else {
       showScreen("screen-filial");
     }
@@ -199,10 +202,63 @@ async function loadFilials() {
 
 function selectFilial(filial) {
   state.filial = filial;
+  state.checklistType = null;
+  state.sections = [];
   state.photos = {};
-  document.getElementById("filial-name-title").textContent = filial.name;
-  renderSections();
-  showScreen("screen-sections");
+  document.getElementById("checklist-filial-title").textContent = filial.name;
+  renderChecklistTypes();
+  showScreen("screen-checklist");
+}
+
+// ---------- 1.5. Chek-list turini tanlash ----------
+const CHECKLIST_TYPE_EMOJI = { opening: "🔓", handover: "🔄", closing: "🔒" };
+
+function renderChecklistTypes() {
+  const list = document.getElementById("checklist-type-list");
+  list.innerHTML = "";
+
+  if (!state.checklistTypes.length) {
+    list.innerHTML = `<p class="hint">Hozircha chek-list turi sozlanmagan</p>`;
+    return;
+  }
+
+  state.checklistTypes.forEach((ct) => {
+    const el = document.createElement("div");
+    el.className = "filial-item";
+    el.innerHTML = `<span>${CHECKLIST_TYPE_EMOJI[ct.key] || "📋"} ${ct.name}</span><span class="arrow">${iconMarkup("chevron")}</span>`;
+    el.addEventListener("click", () => selectChecklistType(ct));
+    list.appendChild(el);
+  });
+}
+
+document.getElementById("btn-back-to-filial").addEventListener("click", () => {
+  showScreen("screen-filial");
+});
+
+async function selectChecklistType(checklistType) {
+  showLoading("Yuklanmoqda...");
+  try {
+    const res = await fetch(
+      `${API_BASE}/api/sections?init_data=${encodeURIComponent(initData)}&checklist_type_id=${checklistType.id}`
+    );
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+
+    state.checklistType = checklistType;
+    state.sections = data.sections;
+    state.photos = {};
+
+    document.getElementById("filial-name-title").textContent = state.filial.name;
+    document.getElementById("checklist-name-subtitle").textContent =
+      `${CHECKLIST_TYPE_EMOJI[checklistType.key] || "📋"} ${checklistType.name}`;
+
+    hideLoading();
+    renderSections();
+    showScreen("screen-sections");
+  } catch (e) {
+    hideLoading();
+    await showAlert("Bo'limlarni yuklab bo'lmadi. Qayta urinib ko'ring.");
+  }
 }
 
 // ---------- 2. Bo'limlar bo'yicha (bir nechta) rasm olish ----------
@@ -342,6 +398,7 @@ async function submitReport() {
     const formData = new FormData();
     formData.append("init_data", initData);
     formData.append("filial_id", state.filial.id);
+    formData.append("checklist_type_id", state.checklistType.id);
 
     const meta = [];
     state.sections.forEach((sec) => {
@@ -680,6 +737,170 @@ async function deleteFilial(f) {
       method: "DELETE",
     });
     await loadAdminFilials();
+  } catch (e) {
+    await showAlert("Xatolik: " + e.message);
+  } finally {
+    hideLoading();
+  }
+}
+
+// ---------- Bo'limlar (har bir chek-list turi uchun alohida) ----------
+let adminSelectedChecklistTypeId = null;
+
+async function initAdminSections() {
+  const subtabsEl = document.getElementById("section-checklist-subtabs");
+  subtabsEl.innerHTML = `<p class="hint">Yuklanmoqda...</p>`;
+  try {
+    const data = await adminFetch(`/api/admin/checklist-types?init_data=${encodeURIComponent(initData)}`);
+    const types = data.checklist_types;
+    subtabsEl.innerHTML = "";
+    if (!types.length) {
+      subtabsEl.innerHTML = `<p class="hint">Chek-list turlari topilmadi</p>`;
+      return;
+    }
+    if (adminSelectedChecklistTypeId === null || !types.some((t) => t.id === adminSelectedChecklistTypeId)) {
+      adminSelectedChecklistTypeId = types[0].id;
+    }
+    types.forEach((t) => {
+      const btn = document.createElement("button");
+      btn.className = "admin-tab-btn" + (t.id === adminSelectedChecklistTypeId ? " active" : "");
+      btn.textContent = `${CHECKLIST_TYPE_EMOJI[t.key] || "📋"} ${t.name}`;
+      btn.addEventListener("click", () => {
+        adminSelectedChecklistTypeId = t.id;
+        subtabsEl.querySelectorAll(".admin-tab-btn").forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        loadAdminSections();
+      });
+      subtabsEl.appendChild(btn);
+    });
+    await loadAdminSections();
+  } catch (e) {
+    subtabsEl.innerHTML = `<p class="hint">Yuklashda xatolik: ${e.message}</p>`;
+  }
+}
+
+async function loadAdminSections() {
+  const list = document.getElementById("sections-list");
+  if (adminSelectedChecklistTypeId === null) return;
+  list.innerHTML = `<p class="hint">Yuklanmoqda...</p>`;
+  try {
+    const data = await adminFetch(
+      `/api/admin/sections?init_data=${encodeURIComponent(initData)}&checklist_type_id=${adminSelectedChecklistTypeId}`
+    );
+    list.innerHTML = "";
+    if (!data.sections.length) {
+      list.innerHTML = `<p class="hint">Hozircha bo'lim yo'q</p>`;
+      return;
+    }
+    data.sections.forEach((s) => {
+      const el = document.createElement("div");
+      el.className = "admin-list-item" + (s.is_active ? "" : " is-inactive");
+      el.innerHTML = `
+        <div class="admin-list-main">
+          <div class="admin-list-title">${s.name} ${s.is_active ? "" : `<span class="badge-text">nofaol</span>`}</div>
+        </div>
+        <div class="admin-list-actions">
+          <button class="icon-btn active-toggle ${s.is_active ? "" : "is-off"}" data-action="toggle" aria-label="${s.is_active ? "Nofaol qilish" : "Faollashtirish"}">${iconMarkup(s.is_active ? "eye" : "eyeOff")}</button>
+          <button class="icon-btn" data-action="edit" aria-label="Tahrirlash">${iconMarkup("edit")}</button>
+          <button class="icon-btn danger" data-action="delete" aria-label="O'chirish">${iconMarkup("trash")}</button>
+        </div>
+      `;
+      el.querySelector('[data-action="toggle"]').addEventListener("click", () => toggleSectionActive(s));
+      el.querySelector('[data-action="edit"]').addEventListener("click", () => editSection(s));
+      el.querySelector('[data-action="delete"]').addEventListener("click", () => deleteSection(s));
+      list.appendChild(el);
+    });
+  } catch (e) {
+    list.innerHTML = `<p class="hint">Yuklashda xatolik: ${e.message}</p>`;
+  }
+}
+
+document.getElementById("btn-add-section").addEventListener("click", async () => {
+  const nameInput = document.getElementById("new-section-name");
+  const name = nameInput.value.trim();
+  if (!name) {
+    await showAlert("Bo'lim nomini kiriting");
+    return;
+  }
+  if (adminSelectedChecklistTypeId === null) {
+    await showAlert("Avval chek-list turini tanlang");
+    return;
+  }
+
+  showLoading("Qo'shilmoqda...");
+  try {
+    await adminFetch("/api/admin/sections", {
+      method: "POST",
+      body: adminForm({ name, checklist_type_id: adminSelectedChecklistTypeId }),
+    });
+    nameInput.value = "";
+    await loadAdminSections();
+  } catch (e) {
+    await showAlert("Xatolik: " + e.message);
+  } finally {
+    hideLoading();
+  }
+});
+
+async function editSection(s) {
+  const result = await showPrompt({
+    title: "Bo'limni tahrirlash",
+    confirmText: "Saqlash",
+    fields: [{ id: "name", label: "Bo'lim nomi", value: s.name }],
+  });
+  if (!result || !result.name) return;
+
+  showLoading("Saqlanmoqda...");
+  try {
+    await adminFetch(`/api/admin/sections/${s.id}`, {
+      method: "PUT",
+      body: adminForm({ name: result.name, is_active: s.is_active }),
+    });
+    await loadAdminSections();
+  } catch (e) {
+    await showAlert("Xatolik: " + e.message);
+  } finally {
+    hideLoading();
+  }
+}
+
+async function toggleSectionActive(s) {
+  const makingInactive = s.is_active;
+  const ok = await showConfirm(
+    makingInactive
+      ? `"${s.name}" bo'limi endi bu chek-listda so'ralmaydi. Istalgan vaqt qaytarish mumkin.`
+      : `"${s.name}" bo'limi qaytadan faol qilinsinmi?`,
+    { title: makingInactive ? "Bo'limni nofaol qilish" : "Bo'limni faollashtirish", confirmText: makingInactive ? "Nofaol qilish" : "Faollashtirish" }
+  );
+  if (!ok) return;
+
+  showLoading("Saqlanmoqda...");
+  try {
+    await adminFetch(`/api/admin/sections/${s.id}/active`, {
+      method: "PUT",
+      body: adminForm({ is_active: !makingInactive }),
+    });
+    await loadAdminSections();
+  } catch (e) {
+    await showAlert("Xatolik: " + e.message);
+  } finally {
+    hideLoading();
+  }
+}
+
+async function deleteSection(s) {
+  const ok = await showConfirm(
+    `"${s.name}" bo'limi bazadan butunlay o'chiriladi (unga bog'liq eski rasm hisobotlari bilan birga). Buning o'rniga ko'z ikonkasidan foydalanish tavsiya etiladi.`,
+    { title: "Bo'limni butunlay o'chirish", confirmText: "Butunlay o'chirish", danger: true }
+  );
+  if (!ok) return;
+
+  showLoading("O'chirilmoqda...");
+  try {
+    await adminFetch(`/api/admin/sections/${s.id}?init_data=${encodeURIComponent(initData)}`, {
+      method: "DELETE",
+    });
+    await loadAdminSections();
   } catch (e) {
     await showAlert("Xatolik: " + e.message);
   } finally {

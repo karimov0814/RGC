@@ -22,6 +22,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
 
 import asyncio
+import asyncpg
 
 import db
 import telegram_utils as tg
@@ -124,27 +125,51 @@ async def _check_superadmin(init_data: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# 1) Mini app ochilganda kerakli konfiguratsiya: filiallar ro'yxati + bo'limlar
+# 1) Mini app ochilganda kerakli konfiguratsiya: filiallar + chek-list turlari
+#    (bo'limlar endi tanlangan chek-list turiga qarab alohida so'raladi —
+#    quyidagi /api/sections ga qarang)
 # ---------------------------------------------------------------------------
 @app.get("/api/config")
 async def get_config(init_data: str):
     user = await _check_auth(init_data)
     filials = await db.list_active_filials()
-    sections = await db.list_active_sections()
+    checklist_types = await db.list_active_checklist_types()
     return {
         "filials": filials,
-        "sections": sections,
+        "checklist_types": checklist_types,
         "is_superadmin": user["is_superadmin"],
     }
 
 
 # ---------------------------------------------------------------------------
+# 1.1) Filial VA chek-list turi tanlangandan keyin — o'sha turga tegishli
+#      bo'limlar (sections) ro'yxati
+# ---------------------------------------------------------------------------
+@app.get("/api/sections")
+async def get_sections(init_data: str, checklist_type_id: int):
+    await _check_auth(init_data)
+    checklist_type = await db.get_checklist_type(checklist_type_id)
+    if not checklist_type:
+        raise HTTPException(status_code=404, detail="Chek-list turi topilmadi")
+    sections = await db.list_active_sections(checklist_type_id)
+    return {"sections": sections, "checklist_type": checklist_type}
+
+
+# ---------------------------------------------------------------------------
 # 2) Yakuniy yuborish: filial + har bir bo'lim uchun rasm(lar)
 # ---------------------------------------------------------------------------
+CHECKLIST_TYPE_EMOJI = {
+    "opening": "🔓",
+    "handover": "🔄",
+    "closing": "🔒",
+}
+
+
 @app.post("/api/submit")
 async def submit(
     init_data: str = Form(...),
     filial_id: int = Form(...),
+    checklist_type_id: int = Form(...),
     items_meta: str = Form(...),  # JSON: [{"section_id": 1, "field": "photo_1", "comment": "..."}]
     files: List[UploadFile] = File(...),
 ):
@@ -153,6 +178,10 @@ async def submit(
     filial = await db.get_filial(filial_id)
     if not filial:
         raise HTTPException(status_code=404, detail="Filial topilmadi")
+
+    checklist_type = await db.get_checklist_type(checklist_type_id)
+    if not checklist_type:
+        raise HTTPException(status_code=404, detail="Chek-list turi topilmadi")
 
     try:
         meta = json.loads(items_meta)
@@ -195,9 +224,12 @@ async def submit(
         filial_name=filial["name"],
         telegram_user_id=user["id"],
         full_name=full_name,
+        checklist_type_id=checklist_type_id,
+        checklist_type_name=checklist_type["name"],
     )
 
     now_str = datetime.now().strftime("%d.%m.%Y %H:%M")
+    checklist_emoji = CHECKLIST_TYPE_EMOJI.get(checklist_type["key"], "📋")
 
     # field nomi -> UploadFile
     files_by_field = {f.filename or f"file_{i}": f for i, f in enumerate(files)}
@@ -207,7 +239,11 @@ async def submit(
         section_name = item.get("section_name", "")
         comment = (item.get("comment") or "").strip()
 
-        caption = f"🏢 <b>{filial['name']}</b>\n🕒 {now_str}\n👤 {full_name}"
+        caption = (
+            f"🏢 <b>{filial['name']}</b>\n"
+            f"{checklist_emoji} <b>{checklist_type['name']}</b>\n"
+            f"🕒 {now_str}\n👤 {full_name}"
+        )
         if section_name:
             caption += f"\n📍 Bo'lim: {section_name}"
         if comment:
@@ -358,6 +394,97 @@ async def admin_link_filial_thread(
     await db.set_filial_thread_id(filial_id, thread_id)
     updated = await db.get_filial(filial_id)
     return {"ok": True, "filial": updated}
+
+
+# ---------- Chek-list turlari (o'qish uchun) ----------
+
+@app.get("/api/admin/checklist-types")
+async def admin_list_checklist_types(init_data: str):
+    await _check_superadmin(init_data)
+    return {"checklist_types": await db.list_all_checklist_types()}
+
+
+# ---------- Bo'limlar (har bir chek-list turi uchun alohida) ----------
+
+@app.get("/api/admin/sections")
+async def admin_list_sections(init_data: str, checklist_type_id: int):
+    await _check_superadmin(init_data)
+    checklist_type = await db.get_checklist_type(checklist_type_id)
+    if not checklist_type:
+        raise HTTPException(status_code=404, detail="Chek-list turi topilmadi")
+    return {"sections": await db.list_all_sections(checklist_type_id)}
+
+
+@app.post("/api/admin/sections")
+async def admin_add_section(
+    init_data: str = Form(...),
+    checklist_type_id: int = Form(...),
+    name: str = Form(...),
+):
+    await _check_superadmin(init_data)
+    name = name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Bo'lim nomi bo'sh bo'lishi mumkin emas")
+    checklist_type = await db.get_checklist_type(checklist_type_id)
+    if not checklist_type:
+        raise HTTPException(status_code=404, detail="Chek-list turi topilmadi")
+    try:
+        section = await db.create_section(checklist_type_id, name)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Bu nomda bo'lim allaqachon mavjud")
+    return {"ok": True, "section": section}
+
+
+@app.put("/api/admin/sections/{section_id}")
+async def admin_update_section(
+    section_id: int,
+    init_data: str = Form(...),
+    name: str = Form(...),
+    is_active: bool = Form(True),
+):
+    await _check_superadmin(init_data)
+    name = name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Bo'lim nomi bo'sh bo'lishi mumkin emas")
+    try:
+        section = await db.update_section(section_id, name, is_active)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Bu nomda bo'lim allaqachon mavjud")
+    if not section:
+        raise HTTPException(status_code=404, detail="Bo'lim topilmadi")
+    return {"ok": True, "section": section}
+
+
+@app.put("/api/admin/sections/{section_id}/active")
+async def admin_set_section_active(
+    section_id: int,
+    init_data: str = Form(...),
+    is_active: bool = Form(...),
+):
+    await _check_superadmin(init_data)
+    section = await db.set_section_active(section_id, is_active)
+    if not section:
+        raise HTTPException(status_code=404, detail="Bo'lim topilmadi")
+    return {"ok": True, "section": section}
+
+
+@app.delete("/api/admin/sections/{section_id}")
+async def admin_delete_section(section_id: int, init_data: str):
+    """Bo'limni bazadan butunlay o'chiradi. Agar bu bo'limga bog'langan
+    eski rasm hisobotlari bo'lsa, Postgres o'chirishga yo'l qo'ymaydi
+    (tarixni buzmaslik uchun) — bunday holatda 400 qaytariladi va
+    frontend buning o'rniga ko'z (faol/nofaol) ikonkasini tavsiya qiladi."""
+    await _check_superadmin(init_data)
+    try:
+        ok = await db.delete_section(section_id)
+    except asyncpg.ForeignKeyViolationError:
+        raise HTTPException(
+            status_code=400,
+            detail="Bu bo'limda allaqachon yuborilgan rasm hisobotlari bor, shuning uchun butunlay o'chirib bo'lmaydi. Buning o'rniga ko'z ikonkasi bilan nofaol qiling.",
+        )
+    if not ok:
+        raise HTTPException(status_code=404, detail="Bo'lim topilmadi")
+    return {"ok": True}
 
 
 @app.put("/api/admin/filials/{filial_id}/active")
