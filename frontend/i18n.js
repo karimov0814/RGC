@@ -24,7 +24,7 @@ const TRANSLATIONS = {
     filials_add_title: "Yangi filial qo'shish",
     filials_name_placeholder: "Filial nomi",
 
-    sections_subtitle: "Har bir chek-list turi uchun qaysi bo'lim (mavzu) so'ralishini shu yerdan sozlang.",
+    sections_subtitle: "Har bir chek-list turi uchun qaysi bo'lim (mavzu) so'ralishini shu yerdan sozlang. Tartibni o'zgartirish uchun ⠿ belgisidan ushlab suring.",
     sections_add_title: "Yangi bo'lim qo'shish",
     sections_add_hint: "Nomni joriy tanlangan tilda kiriting — tizim boshqa 2 tilga avtomatik tarjima qiladi.",
     sections_name_placeholder: "Bo'lim nomi (masalan: Fasad fotosi)",
@@ -123,6 +123,7 @@ const TRANSLATIONS = {
     sections_visibility_title: "\"{name}\" — qaysi filiallarda so'ralsin?",
     sections_visibility_hint: "Belgi olib tashlangan filialda bu bo'lim umuman ko'rinmaydi (masalan tashqi hududi yo'q filialda \"Tashqi hudud\" bo'limi).",
     sections_visibility_no_filials: "Hozircha faol filial yo'q",
+    sections_drag_label: "Tartibini o'zgartirish uchun ushlab suring",
   },
 
   ru: {
@@ -146,7 +147,7 @@ const TRANSLATIONS = {
     filials_add_title: "Добавить новый филиал",
     filials_name_placeholder: "Название филиала",
 
-    sections_subtitle: "Здесь настройте, какие разделы (темы) запрашиваются для каждого типа чек-листа.",
+    sections_subtitle: "Здесь настройте, какие разделы (темы) запрашиваются для каждого типа чек-листа. Чтобы изменить порядок, удерживайте значок ⠿ и перетащите.",
     sections_add_title: "Добавить новый раздел",
     sections_add_hint: "Введите название на текущем выбранном языке — система автоматически переведёт на остальные 2 языка.",
     sections_name_placeholder: "Название раздела (например: Фото фасада)",
@@ -245,6 +246,7 @@ const TRANSLATIONS = {
     sections_visibility_title: "«{name}» — в каких филиалах запрашивать?",
     sections_visibility_hint: "Если снять галочку с филиала, этот раздел там вообще не будет показан (например, раздел «Внешняя территория» в филиале без неё).",
     sections_visibility_no_filials: "Пока нет активных филиалов",
+    sections_drag_label: "Удерживайте, чтобы изменить порядок",
   },
 
   en: {
@@ -268,7 +270,7 @@ const TRANSLATIONS = {
     filials_add_title: "Add new branch",
     filials_name_placeholder: "Branch name",
 
-    sections_subtitle: "Configure which sections (topics) are requested for each checklist type here.",
+    sections_subtitle: "Configure which sections (topics) are requested for each checklist type here. Drag the ⠿ handle to reorder.",
     sections_add_title: "Add new section",
     sections_add_hint: "Enter the name in the currently selected language — the system will automatically translate it into the other 2 languages.",
     sections_name_placeholder: "Section name (e.g. Facade photo)",
@@ -367,6 +369,7 @@ const TRANSLATIONS = {
     sections_visibility_title: "\"{name}\" — which branches should ask for it?",
     sections_visibility_hint: "Unchecking a branch hides this section there completely (e.g. the \"Exterior area\" section at a branch that has none).",
     sections_visibility_no_filials: "No active branches yet",
+    sections_drag_label: "Hold to reorder",
   },
 };
 
