@@ -157,13 +157,16 @@ async def get_config(init_data: str, lang: str = "uz"):
 #      bo'limlar (sections) ro'yxati
 # ---------------------------------------------------------------------------
 @app.get("/api/sections")
-async def get_sections(init_data: str, checklist_type_id: int, lang: str = "uz"):
+async def get_sections(init_data: str, checklist_type_id: int, filial_id: int, lang: str = "uz"):
     lang = _norm_lang(lang)
     await _check_auth(init_data)
     checklist_type = await db.get_checklist_type(checklist_type_id, lang)
     if not checklist_type:
         raise HTTPException(status_code=404, detail="Chek-list turi topilmadi")
-    sections = await db.list_active_sections(checklist_type_id, lang)
+    # filial_id beriladi — shu filialda "yashirilgan" deb belgilangan
+    # bo'limlar (masalan foodcourt filialida "Tashqi hudud") ro'yxatdan
+    # chiqarib tashlanadi (filial_section_hidden jadvali orqali).
+    sections = await db.list_active_sections(checklist_type_id, lang, filial_id=filial_id)
     return {"sections": sections, "checklist_type": checklist_type}
 
 
@@ -208,6 +211,18 @@ async def submit(
 
     if len(meta) != len(files):
         raise HTTPException(status_code=400, detail="Rasmlar soni mos emas")
+
+    # Xavfsizlik: agar foydalanuvchida ESKIRGAN/keshlangan bo'limlar
+    # ro'yxati bo'lsa (masalan sahifani yangilamagan bo'lsa), shu filial
+    # uchun keyinchalik "yashirilgan" deb belgilangan bo'limga rasm
+    # yuborilmasin — bunday bo'lim topilsa so'rov butunlay rad etiladi.
+    checked_section_ids = {item["section_id"] for item in meta}
+    for section_id in checked_section_ids:
+        if await db.is_section_hidden_for_filial(section_id, filial_id):
+            raise HTTPException(
+                status_code=400,
+                detail="Tanlangan bo'limlardan biri bu filial uchun endi mavjud emas. Sahifani yangilab, qayta urinib ko'ring.",
+            )
 
     # Guruhda hali mavzu (topic) yo'q bo'lsa — avtomatik yaratamiz.
     # E'TIBOR: agar guruhda bu filial nomi bilan topic ALLAQACHON mavjud
@@ -543,6 +558,38 @@ async def admin_delete_section(section_id: int, init_data: str):
     if not ok:
         raise HTTPException(status_code=404, detail="Bo'lim topilmadi")
     return {"ok": True}
+
+
+# ---------- Bo'limni filial bo'yicha yashirish ("opt-out") ----------
+# Masalan "Tashqi hudud va fasad fotosi" bo'limi barcha filiallarda
+# default ko'rinadi, lekin foodcourt ichidagi filialda tashqi hudud
+# umuman yo'q bo'lgani uchun admin shu bo'limni faqat o'sha filial(lar)
+# uchun yashirib qo'yishi mumkin.
+
+@app.get("/api/admin/sections/{section_id}/hidden-filials")
+async def admin_get_section_hidden_filials(section_id: int, init_data: str):
+    await _check_superadmin(init_data)
+    hidden_filial_ids = await db.get_hidden_filial_ids_for_section(section_id)
+    return {"hidden_filial_ids": hidden_filial_ids}
+
+
+@app.put("/api/admin/sections/{section_id}/hidden-filials")
+async def admin_set_section_hidden_filials(
+    section_id: int,
+    init_data: str = Form(...),
+    hidden_filial_ids: str = Form("[]"),  # JSON: [1, 5, 7]
+):
+    await _check_superadmin(init_data)
+    try:
+        ids = json.loads(hidden_filial_ids)
+        if not isinstance(ids, list):
+            raise ValueError
+        ids = [int(x) for x in ids]
+    except (json.JSONDecodeError, ValueError):
+        raise HTTPException(status_code=400, detail="hidden_filial_ids noto'g'ri formatda")
+
+    await db.set_hidden_filials_for_section(section_id, ids)
+    return {"ok": True, "hidden_filial_ids": ids}
 
 
 @app.put("/api/admin/filials/{filial_id}/active")

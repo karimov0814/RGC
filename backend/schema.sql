@@ -411,3 +411,25 @@ UPDATE checklist_types SET name_en = name_uz WHERE name_en IS NULL;
 -- uzunlikda bo'lishi mumkin, lekin ayni checklist ichida takrorlanmasligi
 -- muhim emas — admin buni o'zi nazorat qiladi).
 DROP INDEX IF EXISTS sections_name_per_checklist_unique;
+
+-- ============================================================
+--  BO'LIMNI FILIAL BO'YICHA YASHIRISH ("opt-out" model)
+--  Muammo: ba'zi bo'limlar (masalan "Tashqi hudud va fasad fotosi")
+--  barcha filiallarga tegishli emas — masalan foodcourt ichidagi
+--  filialda tashqi hudud umuman yo'q.
+--
+--  Yechim: default holatda HAR BIR bo'lim BARCHA filiallarda ko'rinadi
+--  (hech qanday sozlash talab qilinmaydi). Faqat ISTISNOLAR — "bu bo'lim
+--  shu filialda YO'Q" — shu jadvalda alohida qayd etiladi. Bu bilan:
+--    - Yangi filial qo'shilganda barcha mavjud bo'limlar avtomatik
+--      unga ham tegishli bo'ladi (hech narsa qo'lda belgilash shart
+--      emas).
+--    - Yangi bo'lim qo'shilganda ham xuddi shunday — default barcha
+--      filiallarda ko'rinadi, admin faqat kerak bo'lmagan filiallarni
+--      "yashirish" ro'yxatiga qo'shadi.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS filial_section_hidden (
+    filial_id INTEGER NOT NULL REFERENCES filials(id) ON DELETE CASCADE,
+    section_id INTEGER NOT NULL REFERENCES sections(id) ON DELETE CASCADE,
+    PRIMARY KEY (filial_id, section_id)
+);

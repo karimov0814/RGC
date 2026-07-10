@@ -119,6 +119,10 @@ const TRANSLATIONS = {
     sections_toggle_on_title: "Bo'limni faollashtirish",
     sections_delete_confirm: "\"{name}\" bo'limi bazadan butunlay o'chiriladi (unga bog'liq eski rasm hisobotlari bilan birga). Buning o'rniga ko'z ikonkasidan foydalanish tavsiya etiladi.",
     sections_delete_title: "Bo'limni butunlay o'chirish",
+    sections_visibility_label: "Qaysi filiallarda ko'rinadi",
+    sections_visibility_title: "\"{name}\" — qaysi filiallarda so'ralsin?",
+    sections_visibility_hint: "Belgi olib tashlangan filialda bu bo'lim umuman ko'rinmaydi (masalan tashqi hududi yo'q filialda \"Tashqi hudud\" bo'limi).",
+    sections_visibility_no_filials: "Hozircha faol filial yo'q",
   },
 
   ru: {
@@ -237,6 +241,10 @@ const TRANSLATIONS = {
     sections_toggle_on_title: "Активация раздела",
     sections_delete_confirm: "Раздел «{name}» будет полностью удалён из базы данных (вместе со связанными старыми фотоотчётами). Рекомендуется вместо этого использовать значок глаза.",
     sections_delete_title: "Полное удаление раздела",
+    sections_visibility_label: "В каких филиалах отображается",
+    sections_visibility_title: "«{name}» — в каких филиалах запрашивать?",
+    sections_visibility_hint: "Если снять галочку с филиала, этот раздел там вообще не будет показан (например, раздел «Внешняя территория» в филиале без неё).",
+    sections_visibility_no_filials: "Пока нет активных филиалов",
   },
 
   en: {
@@ -355,6 +363,10 @@ const TRANSLATIONS = {
     sections_toggle_on_title: "Activate section",
     sections_delete_confirm: "The section \"{name}\" will be permanently deleted from the database (along with related old photo reports). Using the eye icon instead is recommended.",
     sections_delete_title: "Permanently delete section",
+    sections_visibility_label: "Which branches it's shown in",
+    sections_visibility_title: "\"{name}\" — which branches should ask for it?",
+    sections_visibility_hint: "Unchecking a branch hides this section there completely (e.g. the \"Exterior area\" section at a branch that has none).",
+    sections_visibility_no_filials: "No active branches yet",
   },
 };
 

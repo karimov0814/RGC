@@ -497,6 +497,8 @@ html, body {
 .modal-box {
   width: 100%;
   max-width: 480px;
+  max-height: 85vh;
+  overflow-y: auto;
   background: var(--bg);
   border-radius: 18px 18px 0 0;
   padding: 20px 18px calc(env(safe-area-inset-bottom, 0) + 18px);

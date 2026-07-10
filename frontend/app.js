@@ -27,6 +27,7 @@ const ICONS = {
   settings: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2.8"/><path d="M19.4 13.5a1.8 1.8 0 0 0 .36 1.98l.06.06a2.16 2.16 0 1 1-3.06 3.06l-.06-.06a1.8 1.8 0 0 0-1.98-.36 1.8 1.8 0 0 0-1.1 1.65V20a2.16 2.16 0 1 1-4.32 0v-.1a1.8 1.8 0 0 0-1.18-1.65 1.8 1.8 0 0 0-1.98.36l-.06.06a2.16 2.16 0 1 1-3.06-3.06l.06-.06a1.8 1.8 0 0 0 .36-1.98 1.8 1.8 0 0 0-1.65-1.1H2a2.16 2.16 0 1 1 0-4.32h.1a1.8 1.8 0 0 0 1.65-1.18 1.8 1.8 0 0 0-.36-1.98l-.06-.06A2.16 2.16 0 1 1 6.4 3.15l.06.06a1.8 1.8 0 0 0 1.98.36h.09A1.8 1.8 0 0 0 9.63 1.9V1.8a2.16 2.16 0 1 1 4.32 0v.1a1.8 1.8 0 0 0 1.1 1.65 1.8 1.8 0 0 0 1.98-.36l.06-.06a2.16 2.16 0 1 1 3.06 3.06l-.06.06a1.8 1.8 0 0 0-.36 1.98v.09c.28.72.94 1.22 1.72 1.24h.1a2.16 2.16 0 1 1 0 4.32h-.1a1.8 1.8 0 0 0-1.65 1.1Z"/></svg>`,
   block: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="8.5"/><path d="M6.2 6.2l11.6 11.6" stroke-linecap="round"/></svg>`,
   crown: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8l3.2 3.2L12 6l4.8 5.2L20 8l-1.4 9.5H5.4Z"/><path d="M5.4 20h13.2"/></svg>`,
+  building: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="10" height="18" rx="1"/><path d="M15 9h4v12H5"/><path d="M8 7h1M11 7h1M8 11h1M11 11h1M8 15h1M11 15h1"/></svg>`,
   link: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 15l6-6"/><path d="M10.5 7.5l1-1a3.5 3.5 0 0 1 5 5l-1 1"/><path d="M13.5 16.5l-1 1a3.5 3.5 0 0 1-5-5l1-1"/></svg>`,
 };
 
@@ -173,8 +174,8 @@ function showConfirm(message, { title, confirmText, danger = false } = {}) {
     showCancel: true,
   }).then((r) => r === true);
 }
-function showPrompt({ title, fields, confirmText }) {
-  return openModal({ title, fields, confirmText: confirmText || t("btn_save"), showCancel: true });
+function showPrompt({ title, message = "", fields, confirmText }) {
+  return openModal({ title, message, fields, confirmText: confirmText || t("btn_save"), showCancel: true });
 }
 
 // ---------- 0. Ruxsat tekshiruvi + 1. Filial tanlash (ilova ochilishi bilan) ----------
@@ -301,7 +302,7 @@ async function refetchSections() {
   if (!state.checklistType) return;
   try {
     const res = await fetch(
-      `${API_BASE}/api/sections?init_data=${encodeURIComponent(initData)}&checklist_type_id=${state.checklistType.id}&lang=${getLang()}`
+      `${API_BASE}/api/sections?init_data=${encodeURIComponent(initData)}&checklist_type_id=${state.checklistType.id}&filial_id=${state.filial.id}&lang=${getLang()}`
     );
     if (!res.ok) return;
     const data = await res.json();
@@ -317,7 +318,7 @@ async function selectChecklistType(checklistType) {
   showLoading(t("loading_default"));
   try {
     const res = await fetch(
-      `${API_BASE}/api/sections?init_data=${encodeURIComponent(initData)}&checklist_type_id=${checklistType.id}&lang=${getLang()}`
+      `${API_BASE}/api/sections?init_data=${encodeURIComponent(initData)}&checklist_type_id=${checklistType.id}&filial_id=${state.filial.id}&lang=${getLang()}`
     );
     if (!res.ok) throw new Error(await res.text());
     const data = await res.json();
@@ -885,11 +886,13 @@ async function loadAdminSections() {
           <div class="admin-list-title">${pickLocalized(s)} ${s.is_active ? "" : `<span class="badge-text">${t("inactive_badge")}</span>`}</div>
         </div>
         <div class="admin-list-actions">
+          <button class="icon-btn" data-action="visibility" aria-label="${t("sections_visibility_label")}">${iconMarkup("building")}</button>
           <button class="icon-btn active-toggle ${s.is_active ? "" : "is-off"}" data-action="toggle" aria-label="${s.is_active ? t("toggle_deactivate_label") : t("toggle_activate_label")}">${iconMarkup(s.is_active ? "eye" : "eyeOff")}</button>
           <button class="icon-btn" data-action="edit" aria-label="${t("edit_label")}">${iconMarkup("edit")}</button>
           <button class="icon-btn danger" data-action="delete" aria-label="${t("delete_label")}">${iconMarkup("trash")}</button>
         </div>
       `;
+      el.querySelector('[data-action="visibility"]').addEventListener("click", () => manageSectionVisibility(s));
       el.querySelector('[data-action="toggle"]').addEventListener("click", () => toggleSectionActive(s));
       el.querySelector('[data-action="edit"]').addEventListener("click", () => editSection(s));
       el.querySelector('[data-action="delete"]').addEventListener("click", () => deleteSection(s));
@@ -897,6 +900,62 @@ async function loadAdminSections() {
     });
   } catch (e) {
     list.innerHTML = `<p class="hint">${t("load_error_prefix")}${e.message}</p>`;
+  }
+}
+
+// Bo'limni qaysi filial(lar)da YASHIRISH kerakligini boshqarish modali —
+// masalan "Tashqi hudud va fasad fotosi" bo'limi barcha filiallarda
+// default ko'rinadi, lekin foodcourt ichidagi filialda tashqi hudud
+// umuman yo'q bo'lgani uchun shu yerdan o'sha filial uchun o'chirib
+// qo'yish mumkin. Checkbox BELGILANGAN = shu filialda ko'rinadi.
+async function manageSectionVisibility(s) {
+  showLoading(t("loading_default"));
+  let filials, hiddenIds;
+  try {
+    const [filialsData, hiddenData] = await Promise.all([
+      adminFetch(`/api/admin/filials?init_data=${encodeURIComponent(initData)}`),
+      adminFetch(`/api/admin/sections/${s.id}/hidden-filials?init_data=${encodeURIComponent(initData)}`),
+    ]);
+    filials = filialsData.filials.filter((f) => f.is_active);
+    hiddenIds = new Set(hiddenData.hidden_filial_ids);
+  } catch (e) {
+    hideLoading();
+    await showAlert(t("error_prefix") + e.message);
+    return;
+  }
+  hideLoading();
+
+  if (!filials.length) {
+    await showAlert(t("sections_visibility_no_filials"));
+    return;
+  }
+
+  const fields = filials.map((f) => ({
+    id: `filial_${f.id}`,
+    label: f.name,
+    type: "checkbox",
+    checked: !hiddenIds.has(f.id),
+  }));
+
+  const result = await showPrompt({
+    title: t("sections_visibility_title", { name: pickLocalized(s) }),
+    message: t("sections_visibility_hint"),
+    fields,
+  });
+  if (!result) return;
+
+  const newHiddenIds = filials.filter((f) => !result[`filial_${f.id}`]).map((f) => f.id);
+
+  showLoading(t("loading_saving"));
+  try {
+    await adminFetch(`/api/admin/sections/${s.id}/hidden-filials`, {
+      method: "PUT",
+      body: adminForm({ hidden_filial_ids: JSON.stringify(newHiddenIds) }),
+    });
+  } catch (e) {
+    await showAlert(t("error_prefix") + e.message);
+  } finally {
+    hideLoading();
   }
 }
 

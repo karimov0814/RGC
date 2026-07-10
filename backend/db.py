@@ -263,16 +263,35 @@ async def get_checklist_type(checklist_type_id: int, lang: str = "uz"):
 
 # ---------- Bo'limlar (har biri bitta chek-list turiga tegishli) ----------
 
-async def list_active_sections(checklist_type_id: int, lang: str = "uz"):
+async def list_active_sections(checklist_type_id: int, lang: str = "uz", filial_id: Optional[int] = None):
     pool = await get_pool()
-    rows = await pool.fetch(
-        """
-        SELECT id, name_uz, name_ru, name_en FROM sections
-        WHERE is_active = TRUE AND checklist_type_id = $1
-        ORDER BY sort_order, id
-        """,
-        checklist_type_id,
-    )
+    if filial_id is None:
+        rows = await pool.fetch(
+            """
+            SELECT id, name_uz, name_ru, name_en FROM sections
+            WHERE is_active = TRUE AND checklist_type_id = $1
+            ORDER BY sort_order, id
+            """,
+            checklist_type_id,
+        )
+    else:
+        # filial_id berilgan bo'lsa, shu filial uchun "yashirilgan" deb
+        # belgilangan bo'limlar (filial_section_hidden) ro'yxatdan
+        # chiqarib tashlanadi — masalan foodcourt filialida "Tashqi
+        # hudud" bo'limi umuman ko'rinmasligi kerak bo'lsa, shu yerda
+        # filtrlanadi.
+        rows = await pool.fetch(
+            """
+            SELECT s.id, s.name_uz, s.name_ru, s.name_en FROM sections s
+            WHERE s.is_active = TRUE AND s.checklist_type_id = $1
+              AND NOT EXISTS (
+                  SELECT 1 FROM filial_section_hidden h
+                  WHERE h.section_id = s.id AND h.filial_id = $2
+              )
+            ORDER BY s.sort_order, s.id
+            """,
+            checklist_type_id, filial_id,
+        )
     result = []
     for r in rows:
         d = dict(r)
@@ -361,6 +380,48 @@ async def set_section_active(section_id: int, is_active: bool) -> Optional[dict]
         section_id, is_active,
     )
     return dict(row) if row else None
+
+
+# ---------- Bo'limni filial bo'yicha yashirish ("opt-out") ----------
+
+async def get_hidden_filial_ids_for_section(section_id: int) -> list[int]:
+    """Admin panelda "qaysi filiallarda ko'rinmasin" modalini ochish
+    uchun — shu bo'lim hozircha qaysi filial(lar) uchun yashirilganini
+    qaytaradi."""
+    pool = await get_pool()
+    rows = await pool.fetch(
+        "SELECT filial_id FROM filial_section_hidden WHERE section_id = $1", section_id
+    )
+    return [r["filial_id"] for r in rows]
+
+
+async def set_hidden_filials_for_section(section_id: int, hidden_filial_ids: list[int]) -> None:
+    """Bo'lim uchun "yashirilgan filiallar" ro'yxatini TO'LIQ almashtiradi
+    (avvalgi holatidan qat'iy nazar) — admin modalda belgilagan checkbox
+    holatiga mos keladi."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            await conn.execute(
+                "DELETE FROM filial_section_hidden WHERE section_id = $1", section_id
+            )
+            if hidden_filial_ids:
+                await conn.executemany(
+                    "INSERT INTO filial_section_hidden (filial_id, section_id) VALUES ($1, $2)",
+                    [(fid, section_id) for fid in hidden_filial_ids],
+                )
+
+
+async def is_section_hidden_for_filial(section_id: int, filial_id: int) -> bool:
+    """Hisobot yuborilayotganda (submit) serverda xavfsizlik uchun
+    tekshiriladi — foydalanuvchi (masalan eskirgan/keshlangan sahifa
+    orqali) shu filial uchun yashirilgan bo'limga rasm yubormasin."""
+    pool = await get_pool()
+    row = await pool.fetchrow(
+        "SELECT 1 FROM filial_section_hidden WHERE section_id = $1 AND filial_id = $2",
+        section_id, filial_id,
+    )
+    return row is not None
 
 
 # ---------- Submissionlar ----------
