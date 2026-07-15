@@ -346,40 +346,176 @@ let activeSectionId = null;
 const cameraInput = document.getElementById("camera-input");
 const galleryInput = document.getElementById("gallery-input");
 
-// ---------- Kamera / Galereya tanlash popup ----------
-// Telegram Android WebView "capture" atributini hisobga olmagani
-// uchun (root cause), foydalanuvchiga MODEL/OS'dan qat'i nazar
-// bir xil, aniq tanlov beriladi: Kamera yoki Galereya.
-function chooseAddPhotoSource() {
-  return new Promise((resolve) => {
-    const popupSupported =
-      typeof tg.showPopup === "function" &&
-      (typeof tg.isVersionAtLeast !== "function" || tg.isVersionAtLeast("6.2"));
+// ============================================================
+//  Rasm manbasi tanlash — DOM ICHIDA chiziladigan action sheet.
+//
+//  MUHIM: tg.showPopup() ISHLATILMAYDI. Sababi — u Telegram
+//  tomonidan NATIVE (WebView'dan tashqarida) chiziladi, shuning
+//  uchun uning tugmasi bosilishi WebView'ning DOM'i uchun haqiqiy
+//  "user activation" hodisasi hisoblanmaydi. Natijada keyinroq
+//  chaqirilgan input.click() ayniqsa iOS Safari/WKWebView'da
+//  darhol avtomatik yopib yuboriladi ("avtomatik chiqib ketish").
+//  Shu sabab bu yerda oddiy HTML <button> va SINXRON click
+//  handlerlar ishlatiladi — bu ikkala platformada ham user
+//  activation'ni saqlab qoladi.
+// ============================================================
+const photoSourceOverlay = document.getElementById("photo-source-overlay");
+const photoSourceTitleEl = document.getElementById("photo-source-title");
+const photoSourceMessageEl = document.getElementById("photo-source-message");
+const photoSourceCameraBtn = document.getElementById("photo-source-camera-btn");
+const photoSourceGalleryBtn = document.getElementById("photo-source-gallery-btn");
+const photoSourceCancelBtn = document.getElementById("photo-source-cancel-btn");
 
-    if (popupSupported) {
-      tg.showPopup(
-        {
-          title: t("add_photo_popup_title"),
-          message: t("add_photo_popup_message"),
-          buttons: [
-            { id: "camera", type: "default", text: t("add_photo_camera_btn") },
-            { id: "gallery", type: "default", text: t("add_photo_gallery_btn") },
-            { id: "cancel", type: "cancel" },
-          ],
-        },
-        (buttonId) => {
-          resolve(buttonId === "camera" || buttonId === "gallery" ? buttonId : null);
-        }
-      );
-    } else {
-      // Juda eski Telegram klientlari uchun zaxira: to'g'ridan-to'g'ri
-      // galereyani ochamiz (kamera uchun capture'ga umid qilinmaydi).
-      resolve("gallery");
-    }
-  });
+function openPhotoSourceSheet() {
+  photoSourceTitleEl.textContent = t("add_photo_popup_title");
+  photoSourceMessageEl.textContent = t("add_photo_popup_message");
+  photoSourceCameraBtn.textContent = t("add_photo_camera_btn");
+  photoSourceGalleryBtn.textContent = t("add_photo_gallery_btn");
+  photoSourceCancelBtn.textContent = t("modal_cancel");
+  photoSourceOverlay.classList.remove("hidden");
+}
+function closePhotoSourceSheet() {
+  photoSourceOverlay.classList.add("hidden");
 }
 
-// Ikkala inputdan kelgan fayllarni bitta joyda qayta ishlash
+// Har bir tugma o'zining SINXRON, haqiqiy DOM click handleriga ega —
+// bunday holatda input.click()/getUserMedia so'rovi bir xil user
+// gesture zanjiri ichida qoladi, va WebKit/Chromium uni bloklamaydi.
+photoSourceCameraBtn.addEventListener("click", () => {
+  closePhotoSourceSheet();
+  openCameraCapture();
+});
+photoSourceGalleryBtn.addEventListener("click", () => {
+  closePhotoSourceSheet();
+  galleryInput.click();
+});
+photoSourceCancelBtn.addEventListener("click", closePhotoSourceSheet);
+photoSourceOverlay.addEventListener("click", (e) => {
+  if (e.target === photoSourceOverlay) closePhotoSourceSheet();
+});
+
+// ============================================================
+//  Custom kamera UI (getUserMedia).
+//
+//  NEGA KERAK: real qurilmalarda tekshirilganda ma'lum bo'ldiki,
+//  Telegram Android WebView'ining ichki fayl-chooser implementatsiyasi
+//  (onShowFileChooser) HTML capture="environment" atributini butunlay
+//  e'tiborga olmaydi — cameraInput.click() chaqirilsa ham baribir
+//  umumiy Galereya/Fayllar ekrani ochiladi. Bu — native ilova darajasidagi
+//  cheklov, uni veb kod bilan majburlab bo'lmaydi. Shu sabab kamera
+//  uchun butunlay boshqa yo'l tanlandi: getUserMedia() orqali browser
+//  darajasida to'g'ridan-to'g'ri kamera oqimini olib, o'z UI'imiz bilan
+//  suratga olamiz — bu OS/Telegram chooser'iga umuman bog'liq emas.
+// ============================================================
+const cameraOverlay = document.getElementById("camera-overlay");
+const cameraVideoEl = document.getElementById("camera-video");
+const cameraCanvasEl = document.getElementById("camera-canvas");
+const cameraCloseBtn = document.getElementById("camera-close-btn");
+const cameraShutterBtn = document.getElementById("camera-shutter-btn");
+const cameraSwitchBtn = document.getElementById("camera-switch-btn");
+
+cameraCloseBtn.innerHTML = iconMarkup("close");
+cameraSwitchBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2.1 21 6l-4 3.9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 21.9 3 18l4-3.9"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>`;
+
+let cameraStream = null;
+let cameraFacingMode = "environment"; // orqa kamera birinchi ustuvorlik
+
+async function startCameraStream(facingMode) {
+  // Avval eski oqimni to'xtatamiz — aks holda kamera band bo'lib qolishi mumkin.
+  stopCameraStream();
+  cameraStream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: { ideal: facingMode } },
+    audio: false,
+  });
+  cameraVideoEl.srcObject = cameraStream;
+  await cameraVideoEl.play();
+}
+
+function stopCameraStream() {
+  if (cameraStream) {
+    cameraStream.getTracks().forEach((track) => track.stop());
+    cameraStream = null;
+  }
+  cameraVideoEl.srcObject = null;
+}
+
+async function openCameraCapture() {
+  // getUserMedia faqat xavfsiz kontekstda (https) va zamonaviy
+  // brauzerlarda mavjud. Mavjud bo'lmasa — native inputga zaxira.
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    cameraInput.click();
+    return;
+  }
+  try {
+    await startCameraStream(cameraFacingMode);
+    cameraOverlay.classList.remove("hidden");
+  } catch (err) {
+    // NotAllowedError (ruxsat berilmagan), NotFoundError (kamera yo'q)
+    // va hokazo — foydalanuvchini bloklab qo'ymaslik uchun native
+    // inputga qaytamiz (Telegram bu holatda hech bo'lmasa Fayllar/
+    // Galereya orqali rasm tanlash imkonini beradi).
+    console.error("Camera error:", err);
+    stopCameraStream();
+    cameraOverlay.classList.add("hidden");
+    await showAlert(t("camera_permission_denied"));
+    cameraInput.click();
+  }
+}
+
+function closeCameraCapture() {
+  stopCameraStream();
+  cameraOverlay.classList.add("hidden");
+}
+
+cameraCloseBtn.addEventListener("click", closeCameraCapture);
+
+cameraSwitchBtn.addEventListener("click", async () => {
+  cameraFacingMode = cameraFacingMode === "environment" ? "user" : "environment";
+  try {
+    await startCameraStream(cameraFacingMode);
+  } catch (err) {
+    console.error("Camera switch error:", err);
+    // Almashtirish muvaffaqiyatsiz bo'lsa — oldingi kameraga qaytamiz.
+    cameraFacingMode = cameraFacingMode === "environment" ? "user" : "environment";
+    try {
+      await startCameraStream(cameraFacingMode);
+    } catch (_) {
+      closeCameraCapture();
+    }
+  }
+});
+
+cameraShutterBtn.addEventListener("click", () => {
+  if (!cameraStream || activeSectionId === null) return;
+  const w = cameraVideoEl.videoWidth;
+  const h = cameraVideoEl.videoHeight;
+  if (!w || !h) return;
+
+  cameraCanvasEl.width = w;
+  cameraCanvasEl.height = h;
+  const ctx = cameraCanvasEl.getContext("2d");
+  ctx.drawImage(cameraVideoEl, 0, 0, w, h);
+
+  cameraCanvasEl.toBlob(
+    (blob) => {
+      if (!blob) return;
+      const file = new File([blob], `photo_${Date.now()}.jpg`, { type: "image/jpeg" });
+      handlePickedFiles([file]);
+      closeCameraCapture();
+    },
+    "image/jpeg",
+    0.92
+  );
+});
+
+// Ilova fonga o'tsa (Telegram'da boshqa oynaga o'tilsa) kamerani
+// avtomatik o'chirib qo'yamiz — resurs va maxfiylik uchun muhim.
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden && cameraStream) closeCameraCapture();
+});
+
+// Ikkala inputdan (galereya) va getUserMedia'dan (kamera) kelgan
+// fayllarni bitta joyda qayta ishlash.
 function handlePickedFiles(fileList) {
   const files = Array.from(fileList || []);
   if (!files.length || activeSectionId === null) return;
@@ -452,15 +588,9 @@ function renderSectionCard(sectionId) {
     ${isDone ? `<textarea class="comment-input" rows="2" placeholder="${t("comment_placeholder")}">${photos[0].comment || ""}</textarea>` : ""}
   `;
 
-  card.querySelector(".add-photo-btn").addEventListener("click", async () => {
+  card.querySelector(".add-photo-btn").addEventListener("click", () => {
     activeSectionId = sectionId;
-    const choice = await chooseAddPhotoSource();
-    if (choice === "camera") {
-      cameraInput.click();
-    } else if (choice === "gallery") {
-      galleryInput.click();
-    }
-    // choice === null -> foydalanuvchi bekor qildi, hech narsa ochilmaydi
+    openPhotoSourceSheet();
   });
 
   card.querySelectorAll(".remove-photo-btn").forEach((btn) => {

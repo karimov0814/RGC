@@ -46,6 +46,7 @@ const TRANSLATIONS = {
     add_photo_popup_message: "Rasmni qanday qo'shmoqchisiz?",
     add_photo_camera_btn: "📷 Kamera",
     add_photo_gallery_btn: "🖼 Galereya",
+    camera_permission_denied: "Kameraga ruxsat berilmadi yoki u mavjud emas. Fayl tanlash ekrani ochiladi.",
     photo_count: "{n} ta rasm",
     comment_placeholder: "Izoh (ixtiyoriy)",
 
@@ -175,6 +176,7 @@ const TRANSLATIONS = {
     add_photo_popup_message: "Как хотите добавить фото?",
     add_photo_camera_btn: "📷 Камера",
     add_photo_gallery_btn: "🖼 Галерея",
+    camera_permission_denied: "Доступ к камере не предоставлен или она недоступна. Откроется выбор файла.",
     photo_count: "{n} фото",
     comment_placeholder: "Комментарий (необязательно)",
 
@@ -304,6 +306,7 @@ const TRANSLATIONS = {
     add_photo_popup_message: "How would you like to add a photo?",
     add_photo_camera_btn: "📷 Camera",
     add_photo_gallery_btn: "🖼 Gallery",
+    camera_permission_denied: "Camera access was denied or is unavailable. Opening file picker instead.",
     photo_count: "{n} photo(s)",
     comment_placeholder: "Comment (optional)",
 
