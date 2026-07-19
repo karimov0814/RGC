@@ -72,6 +72,21 @@ async def create_forum_topic(name: str) -> int:
         return data["result"]["message_thread_id"]
 
 
+async def delete_message(chat_id: int, message_id: int) -> None:
+    """Xabarni chatdan o'chiradi — masalan xodimning shaxsiy chatiga
+    zaxira sifatida yuborilgan qoralama rasmi endi kerak bo'lmay
+    qolganda (hisobot yuborilgach, rasm o'chirilganda, yoki qoralama
+    eskirib avtomatik tozalanganda). Ataylab XATOLIKNI KO'TARMAYDI —
+    bu "iloji bo'lsa tozalash", muvaffaqiyatsiz bo'lsa ham (masalan
+    xabar allaqachon qo'lda o'chirilgan bo'lsa) asosiy oqimga
+    to'sqinlik qilmasligi kerak."""
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            await client.post(f"{TG_API}/deleteMessage", data={"chat_id": chat_id, "message_id": message_id})
+    except Exception:  # noqa: BLE001
+        pass
+
+
 async def send_photo_to_topic(thread_id: int, photo_bytes: bytes, filename: str,
                                caption: str) -> dict:
     """Rasmni tegishli filial mavzusiga (topic) yuboradi. {file_id, message_id} qaytaradi."""

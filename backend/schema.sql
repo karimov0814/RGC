@@ -511,3 +511,10 @@ CREATE INDEX IF NOT EXISTS idx_draft_photos_draft_id ON draft_photos(draft_id);
 -- ------------------------------------------------------------
 ALTER TABLE draft_photos ADD COLUMN IF NOT EXISTS telegram_file_id TEXT;
 ALTER TABLE draft_photos ALTER COLUMN photo_data DROP NOT NULL;
+
+-- Xodimning shaxsiy chatiga zaxira sifatida yuborilgan xabarning ID'si —
+-- hisobot muvaffaqiyatli guruhga yuborilgach (yoki rasm o'chirilganda/
+-- qoralama eskirib avtomatik tozalanganda), shu xabar botning shaxsiy
+-- chatidan HAM o'chirib tashlanadi (chatni tartibsiz to'ldirib
+-- yubormasligi uchun).
+ALTER TABLE draft_photos ADD COLUMN IF NOT EXISTS telegram_message_id BIGINT;

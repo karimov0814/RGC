@@ -77,7 +77,14 @@ async def _draft_cleanup_loop():
     ketadi va qaytadan boshlashga to'g'ri keladi."""
     while True:
         try:
+            # Avval o'chirilishi kutilayotgan qoralamalarning zaxira
+            # xabarlari ro'yxatini olamiz (bazadan o'chgandan keyin bu
+            # ma'lumot yo'qoladi), keyin bazadan o'chiramiz, so'ng har
+            # bir xabarni xodimning shaxsiy chatidan ham tozalaymiz.
+            pending_messages = await db.get_stale_draft_photo_messages(max_age_minutes=15)
             deleted = await db.cleanup_stale_drafts(max_age_minutes=15)
+            for msg in pending_messages:
+                await tg.delete_message(msg["telegram_user_id"], msg["telegram_message_id"])
             if deleted:
                 print(f"[draft_cleanup] {deleted} ta eskirgan (15+ daqiqa tegilmagan) qoralama tozalandi")
         except Exception as e:  # noqa: BLE001
@@ -286,6 +293,7 @@ async def post_draft_photo(
         filename=file.filename or "photo.jpg",
         content_type=file.content_type or "image/jpeg",
         telegram_file_id=sent["file_id"],
+        telegram_message_id=sent["message_id"],
     )
     return {
         "ok": True,
@@ -339,9 +347,11 @@ async def put_draft_photo(
 @app.delete("/api/draft/photo/{photo_id}")
 async def delete_draft_photo(photo_id: int, init_data: str):
     user = await _check_auth(init_data)
-    ok = await db.delete_draft_photo(photo_id, user["id"])
-    if not ok:
+    result = await db.delete_draft_photo(photo_id, user["id"])
+    if not result:
         raise HTTPException(status_code=404, detail="Rasm topilmadi")
+    if result.get("telegram_message_id"):
+        await tg.delete_message(result["telegram_user_id"], result["telegram_message_id"])
     return {"ok": True}
 
 
@@ -544,8 +554,13 @@ async def submit(
         # yuz berib, xodim qayta "Yuborish"ni bosishga majbur bo'lsa —
         # allaqachon yuborilgan bo'limlar QAYTA yuborilmaydi (dublikat
         # bo'lmaydi), faqat qolganlari qayta urinilardi.
+        # Shu bilan birga, endi kerak bo'lmay qolgan zaxira nusxasini
+        # xodimning shaxsiy chatidan ham o'chirib tashlaymiz (chatni
+        # tartibsiz to'ldirib yubormasligi uchun).
         for p in photos_meta:
-            await db.delete_draft_photo(p["id"], user["id"])
+            deleted = await db.delete_draft_photo(p["id"], user["id"])
+            if deleted and deleted.get("telegram_message_id"):
+                await tg.delete_message(deleted["telegram_user_id"], deleted["telegram_message_id"])
 
     # Hammasi muvaffaqiyatli yuborilgach — qoralama endi kerak emas.
     await db.clear_draft(user["id"])

@@ -62,8 +62,8 @@ async def main():
                 row["telegram_user_id"], row["photo_data"], row["filename"] or "photo.jpg"
             )
             await pool.execute(
-                "UPDATE draft_photos SET telegram_file_id = $2, photo_data = NULL WHERE id = $1",
-                row["id"], sent["file_id"],
+                "UPDATE draft_photos SET telegram_file_id = $2, telegram_message_id = $3, photo_data = NULL WHERE id = $1",
+                row["id"], sent["file_id"], sent["message_id"],
             )
             ok += 1
             print(f"  #{row['id']} -> OK (file_id saqlandi, bayt tozalandi)")

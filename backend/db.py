@@ -534,20 +534,23 @@ async def set_draft_meta(telegram_user_id: int, filial_id: Optional[int],
 
 
 async def add_draft_photo(telegram_user_id: int, section_id: int, comment: Optional[str],
-                           filename: str, content_type: str, telegram_file_id: str) -> dict:
+                           filename: str, content_type: str, telegram_file_id: str,
+                           telegram_message_id: Optional[int] = None) -> dict:
     """E'TIBOR: rasmning bayti (photo_data) endi bu yerga YOZILMAYDI —
     rasm allaqachon Telegramga (xodimning shaxsiy chatiga, zaxira sifatida)
     yuborilgan va uning `telegram_file_id`si shu yerda saqlanadi. Shu
-    tufayli Postgres hech qachon rasm baytlari bilan to'lib qolmaydi."""
+    tufayli Postgres hech qachon rasm baytlari bilan to'lib qolmaydi.
+    `telegram_message_id` esa shu xabarni keyinchalik (kerak bo'lmay
+    qolganda) chatdan o'chirib tashlash uchun saqlanadi."""
     pool = await get_pool()
     draft = await get_or_create_draft(telegram_user_id)
     row = await pool.fetchrow(
         """
-        INSERT INTO draft_photos (draft_id, section_id, comment, filename, content_type, telegram_file_id)
-        VALUES ($1, $2, $3, $4, $5, $6)
+        INSERT INTO draft_photos (draft_id, section_id, comment, filename, content_type, telegram_file_id, telegram_message_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
         RETURNING id, draft_id, section_id, comment, filename, content_type, created_at
         """,
-        draft["id"], section_id, comment, filename, content_type, telegram_file_id,
+        draft["id"], section_id, comment, filename, content_type, telegram_file_id, telegram_message_id,
     )
     await pool.execute("UPDATE drafts SET updated_at = now() WHERE id = $1", draft["id"])
     return dict(row)
@@ -584,7 +587,7 @@ async def get_draft_photo(photo_id: int, telegram_user_id: int) -> Optional[dict
     row = await pool.fetchrow(
         """
         SELECT dp.id, dp.draft_id, dp.section_id, dp.comment, dp.filename, dp.content_type,
-               dp.telegram_file_id, dp.photo_data
+               dp.telegram_file_id, dp.telegram_message_id, dp.photo_data
         FROM draft_photos dp
         JOIN drafts d ON d.id = dp.draft_id
         WHERE dp.id = $1 AND d.telegram_user_id = $2
@@ -614,21 +617,25 @@ async def update_draft_photo_comment(photo_id: int, telegram_user_id: int, comme
     return changed
 
 
-async def delete_draft_photo(photo_id: int, telegram_user_id: int) -> bool:
+async def delete_draft_photo(photo_id: int, telegram_user_id: int) -> Optional[dict]:
+    """O'chirilgan qator haqida ma'lumot (jumladan `telegram_user_id` va
+    `telegram_message_id`) qaytaradi — shu tufayli chaqiruvchi (app.py)
+    xodimning shaxsiy chatidagi mos zaxira xabarini ham o'chira oladi."""
     pool = await get_pool()
-    result = await pool.execute(
+    row = await pool.fetchrow(
         """
         DELETE FROM draft_photos
         WHERE id = $1 AND draft_id IN (SELECT id FROM drafts WHERE telegram_user_id = $2)
+        RETURNING telegram_message_id
         """,
         photo_id, telegram_user_id,
     )
-    changed = result.endswith(" 1")
-    if changed:
+    if row:
         await pool.execute(
             "UPDATE drafts SET updated_at = now() WHERE telegram_user_id = $1", telegram_user_id
         )
-    return changed
+        return {"telegram_user_id": telegram_user_id, "telegram_message_id": row["telegram_message_id"]}
+    return None
 
 
 async def clear_draft(telegram_user_id: int) -> None:
@@ -637,6 +644,25 @@ async def clear_draft(telegram_user_id: int) -> None:
     yoki xodim "boshidan boshlash"ni tanlaganda chaqiriladi."""
     pool = await get_pool()
     await pool.execute("DELETE FROM drafts WHERE telegram_user_id = $1", telegram_user_id)
+
+
+async def get_stale_draft_photo_messages(max_age_minutes: int = 15) -> list[dict]:
+    """cleanup_stale_drafts BOSHLANISHIDAN OLDIN chaqiriladi — o'chirilishi
+    kutilayotgan qoralamalarning zaxira xabarlari ro'yxatini (kimga,
+    qaysi message_id) qaytaradi, shunda ularni keyin Telegramdan ham
+    (xodimning shaxsiy chatidan) o'chirish mumkin bo'ladi."""
+    pool = await get_pool()
+    rows = await pool.fetch(
+        """
+        SELECT dp.telegram_message_id, d.telegram_user_id
+        FROM draft_photos dp
+        JOIN drafts d ON d.id = dp.draft_id
+        WHERE d.updated_at < now() - ($1 || ' minutes')::interval
+          AND dp.telegram_message_id IS NOT NULL
+        """,
+        str(max_age_minutes),
+    )
+    return [dict(r) for r in rows]
 
 
 async def cleanup_stale_drafts(max_age_minutes: int = 15) -> int:
