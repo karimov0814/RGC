@@ -221,6 +221,24 @@ html, body {
   height: 100%;
   margin: 0;
 }
+.photo-thumb-wrap.uploading .photo-preview {
+  opacity: 0.5;
+}
+.photo-thumb-wrap.uploading::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.6);
+  border-top-color: #fff;
+  animation: photo-upload-spin 0.8s linear infinite;
+}
+@keyframes photo-upload-spin {
+  to { transform: rotate(360deg); }
+}
 .remove-photo-btn {
   position: absolute;
   top: -6px;

@@ -475,3 +475,142 @@ async def add_submission_photo(submission_id: int, section_id: int, file_id: str
         """,
         submission_id, section_id, file_id, comment, sent_message_id,
     )
+
+
+# ---------- Qoralamalar (draft) ----------
+# Har bir xodimning FAQAT o'ziga tegishli, hali yuborilmagan hisoboti —
+# rasm olingan zahoti shu yerga saqlanadi, shuning uchun ilova yopilib
+# ketsa yoki "Yuborish" muvaffaqiyatsiz tugasa ham ma'lumot yo'qolmaydi.
+
+async def get_draft(telegram_user_id: int) -> Optional[dict]:
+    pool = await get_pool()
+    row = await pool.fetchrow(
+        "SELECT id, telegram_user_id, filial_id, checklist_type_id, lang, updated_at "
+        "FROM drafts WHERE telegram_user_id = $1",
+        telegram_user_id,
+    )
+    return dict(row) if row else None
+
+
+async def get_or_create_draft(telegram_user_id: int) -> dict:
+    pool = await get_pool()
+    row = await pool.fetchrow(
+        """
+        INSERT INTO drafts (telegram_user_id)
+        VALUES ($1)
+        ON CONFLICT (telegram_user_id) DO UPDATE SET telegram_user_id = EXCLUDED.telegram_user_id
+        RETURNING id, telegram_user_id, filial_id, checklist_type_id, lang, updated_at
+        """,
+        telegram_user_id,
+    )
+    return dict(row)
+
+
+async def set_draft_meta(telegram_user_id: int, filial_id: Optional[int],
+                          checklist_type_id: Optional[int], lang: str) -> dict:
+    """Foydalanuvchi filial/chek-list turini tanlaganda chaqiriladi —
+    shu tanlov saqlanadi, shunda ilova qayta ochilganda xuddi shu
+    joydan (bo'limlar ekranidan) davom etadi. Agar filial yoki
+    chek-list turi AVVALGISIDAN FARQLI bo'lsa, eski qoralamadagi
+    rasmlar endi mos kelmay qoladi — shuning uchun bunday holatda
+    avvalgi rasmlar tozalanadi (yangi hisobot boshlanganda eski
+    filialning rasmlari aralashib ketmasin)."""
+    pool = await get_pool()
+    existing = await get_or_create_draft(telegram_user_id)
+    changed = (existing["filial_id"] != filial_id) or (existing["checklist_type_id"] != checklist_type_id)
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            row = await conn.fetchrow(
+                """
+                UPDATE drafts SET filial_id = $2, checklist_type_id = $3, lang = $4, updated_at = now()
+                WHERE telegram_user_id = $1
+                RETURNING id, telegram_user_id, filial_id, checklist_type_id, lang, updated_at
+                """,
+                telegram_user_id, filial_id, checklist_type_id, lang,
+            )
+            if changed:
+                await conn.execute("DELETE FROM draft_photos WHERE draft_id = $1", row["id"])
+    return dict(row)
+
+
+async def add_draft_photo(telegram_user_id: int, section_id: int, comment: Optional[str],
+                           filename: str, content_type: str, photo_data: bytes) -> dict:
+    pool = await get_pool()
+    draft = await get_or_create_draft(telegram_user_id)
+    row = await pool.fetchrow(
+        """
+        INSERT INTO draft_photos (draft_id, section_id, comment, filename, content_type, photo_data)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING id, draft_id, section_id, comment, filename, content_type, created_at
+        """,
+        draft["id"], section_id, comment, filename, content_type, photo_data,
+    )
+    await pool.execute("UPDATE drafts SET updated_at = now() WHERE id = $1", draft["id"])
+    return dict(row)
+
+
+async def list_draft_photos(telegram_user_id: int) -> list[dict]:
+    """Qoralamadagi rasmlar ro'yxati — rasm BAYTLARISIZ (faqat metadata),
+    ilova ochilganda tez yuklash uchun. Rasmning o'zi kerak bo'lsa
+    (masalan preview yoki yakuniy yuborish uchun) get_draft_photo /
+    get_draft_photo_bytes ishlatiladi."""
+    pool = await get_pool()
+    rows = await pool.fetch(
+        """
+        SELECT dp.id, dp.section_id, dp.comment, dp.filename, dp.created_at
+        FROM draft_photos dp
+        JOIN drafts d ON d.id = dp.draft_id
+        WHERE d.telegram_user_id = $1
+        ORDER BY dp.id
+        """,
+        telegram_user_id,
+    )
+    return [dict(r) for r in rows]
+
+
+async def get_draft_photo(photo_id: int, telegram_user_id: int) -> Optional[dict]:
+    """Egalikni ham tekshiradi — boshqa xodim boshqasining rasmini
+    (hatto id'sini bilib olsa ham) ko'ra/o'chira olmasligi uchun."""
+    pool = await get_pool()
+    row = await pool.fetchrow(
+        """
+        SELECT dp.id, dp.draft_id, dp.section_id, dp.comment, dp.filename, dp.content_type, dp.photo_data
+        FROM draft_photos dp
+        JOIN drafts d ON d.id = dp.draft_id
+        WHERE dp.id = $1 AND d.telegram_user_id = $2
+        """,
+        photo_id, telegram_user_id,
+    )
+    return dict(row) if row else None
+
+
+async def update_draft_photo_comment(photo_id: int, telegram_user_id: int, comment: Optional[str]) -> bool:
+    pool = await get_pool()
+    result = await pool.execute(
+        """
+        UPDATE draft_photos SET comment = $3
+        WHERE id = $1 AND draft_id IN (SELECT id FROM drafts WHERE telegram_user_id = $2)
+        """,
+        photo_id, telegram_user_id, comment,
+    )
+    return result.endswith(" 1")
+
+
+async def delete_draft_photo(photo_id: int, telegram_user_id: int) -> bool:
+    pool = await get_pool()
+    result = await pool.execute(
+        """
+        DELETE FROM draft_photos
+        WHERE id = $1 AND draft_id IN (SELECT id FROM drafts WHERE telegram_user_id = $2)
+        """,
+        photo_id, telegram_user_id,
+    )
+    return result.endswith(" 1")
+
+
+async def clear_draft(telegram_user_id: int) -> None:
+    """Qoralamani (va unga tegishli barcha rasmlarni, CASCADE orqali)
+    butunlay o'chiradi — hisobot muvaffaqiyatli yuborilgandan keyin
+    yoki xodim "boshidan boshlash"ni tanlaganda chaqiriladi."""
+    pool = await get_pool()
+    await pool.execute("DELETE FROM drafts WHERE telegram_user_id = $1", telegram_user_id)

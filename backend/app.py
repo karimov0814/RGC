@@ -25,7 +25,8 @@ except ImportError:
 
 from fastapi import FastAPI, Form, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from typing import List, Optional
+from fastapi.responses import Response
+from typing import Optional
 
 import asyncio
 import asyncpg
@@ -177,7 +178,152 @@ async def get_sections(init_data: str, checklist_type_id: int, filial_id: int, l
 
 
 # ---------------------------------------------------------------------------
-# 2) Yakuniy yuborish: filial + har bir bo'lim uchun rasm(lar)
+# 1.5) QORALAMA (draft) — hali yuborilmagan, jarayondagi hisobot.
+#
+# Nega kerak: oldin rasm/izoh faqat mini app'ning JS xotirasida turardi —
+# xodim botdan chiqib ketsa yoki ilova fonga o'tib qayta yuklansa hammasi
+# yo'qolardi. Endi HAR BIR rasm olingan zahoti shu yerga (bazaga) darhol
+# saqlanadi. Shu tufayli:
+#   - Xodim chiqib ketsa/ilova yopilsa — rasmlar, izohlar va tanlangan
+#     filial/chek-list turi saqlanib qoladi, keyin qaytib kirganda xuddi
+#     shu joyidan davom etadi.
+#   - "Yuborish" bosilganda endi barcha rasmlarni qayta yuklash shart
+#     emas (ular allaqachon serverda) — shuning uchun sekin internetda
+#     ham yuborish tezroq va ishonchliroq ishlaydi.
+#   - Qoralama FAQAT shu xodimning o'ziga tegishli — telegram_user_id
+#     orqali bog'langan, boshqa hech kim ko'ra olmaydi.
+# ---------------------------------------------------------------------------
+
+@app.get("/api/draft")
+async def get_draft(init_data: str, lang: str = "uz"):
+    lang = _norm_lang(lang)
+    user = await _check_auth(init_data)
+    draft = await db.get_draft(user["id"])
+    if not draft:
+        return {"draft": None, "photos": []}
+
+    photos = await db.list_draft_photos(user["id"])
+    photos_out = [
+        {
+            "id": p["id"],
+            "section_id": p["section_id"],
+            "comment": p["comment"] or "",
+            "image_url": f"/api/draft/photo/{p['id']}/image?init_data={init_data}",
+        }
+        for p in photos
+    ]
+    return {
+        "draft": {
+            "filial_id": draft["filial_id"],
+            "checklist_type_id": draft["checklist_type_id"],
+            "lang": draft["lang"],
+        },
+        "photos": photos_out,
+    }
+
+
+@app.put("/api/draft/meta")
+async def put_draft_meta(
+    init_data: str = Form(...),
+    filial_id: Optional[int] = Form(None),
+    checklist_type_id: Optional[int] = Form(None),
+    lang: str = Form("uz"),
+):
+    """Xodim filial va/yoki chek-list turini tanlaganda chaqiriladi —
+    shu tanlov saqlanadi, shunda ilova qayta ochilganda aynan shu
+    joydan davom etadi."""
+    lang = _norm_lang(lang)
+    user = await _check_auth(init_data)
+    draft = await db.set_draft_meta(user["id"], filial_id, checklist_type_id, lang)
+    return {"ok": True, "draft": draft}
+
+
+@app.post("/api/draft/photo")
+async def post_draft_photo(
+    init_data: str = Form(...),
+    section_id: int = Form(...),
+    comment: str = Form(""),
+    file: UploadFile = File(...),
+):
+    """Rasm olingan ZAHOTI (foydalanuvchi "Yuborish"ni bosishidan ancha
+    oldin) darhol serverga saqlaydi — shu tufayli ilova favqulodda
+    yopilib qolsa ham rasm yo'qolmaydi."""
+    user = await _check_auth(init_data)
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="Bo'sh fayl")
+    photo = await db.add_draft_photo(
+        telegram_user_id=user["id"],
+        section_id=section_id,
+        comment=comment.strip() or None,
+        filename=file.filename or "photo.jpg",
+        content_type=file.content_type or "image/jpeg",
+        photo_data=data,
+    )
+    return {
+        "ok": True,
+        "photo": {
+            "id": photo["id"],
+            "section_id": photo["section_id"],
+            "comment": photo["comment"] or "",
+            "image_url": f"/api/draft/photo/{photo['id']}/image?init_data={init_data}",
+        },
+    }
+
+
+@app.get("/api/draft/photo/{photo_id}/image")
+async def get_draft_photo_image(photo_id: int, init_data: str):
+    """Qoralamadagi rasmni ko'rsatish uchun (masalan ilova qayta
+    ochilganda avvalgi rasmlar preview'ini tiklash). Faqat rasmning
+    egasi (o'sha telegram_user_id) ko'ra oladi."""
+    user = await _check_auth(init_data)
+    photo = await db.get_draft_photo(photo_id, user["id"])
+    if not photo:
+        raise HTTPException(status_code=404, detail="Rasm topilmadi")
+    return Response(content=photo["photo_data"], media_type=photo["content_type"] or "image/jpeg")
+
+
+@app.put("/api/draft/photo/{photo_id}")
+async def put_draft_photo(
+    photo_id: int,
+    init_data: str = Form(...),
+    comment: str = Form(""),
+):
+    user = await _check_auth(init_data)
+    ok = await db.update_draft_photo_comment(photo_id, user["id"], comment.strip() or None)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Rasm topilmadi")
+    return {"ok": True}
+
+
+@app.delete("/api/draft/photo/{photo_id}")
+async def delete_draft_photo(photo_id: int, init_data: str):
+    user = await _check_auth(init_data)
+    ok = await db.delete_draft_photo(photo_id, user["id"])
+    if not ok:
+        raise HTTPException(status_code=404, detail="Rasm topilmadi")
+    return {"ok": True}
+
+
+@app.delete("/api/draft")
+async def delete_draft(init_data: str):
+    """Xodim "boshidan boshlash" ni tanlaganda — butun qoralamani
+    (barcha rasmlari bilan) o'chiradi."""
+    user = await _check_auth(init_data)
+    await db.clear_draft(user["id"])
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# 2) Yakuniy yuborish: filial + har bir bo'lim uchun oldindan (draft
+#    sifatida) saqlangan rasm(lar)ni Telegram guruhiga jo'natish.
+#
+# E'TIBOR: rasmlar bu so'rovda YUKLANMAYDI — ular allaqachon
+# /api/draft/photo orqali serverda saqlangan. Shu tufayli bu so'rov
+# yengil (faqat matn) va sekin/beqaror internetda ham muvaffaqiyatli
+# yetib borish ehtimoli ancha yuqori. Agar baribir uzilib qolsa —
+# qoralama saqlanib qoladi va xodim shunchaki qayta "Yuborish"ni
+# bosishi kifoya (rasmlarni qayta yuklashi shart emas).
 # ---------------------------------------------------------------------------
 CHECKLIST_TYPE_EMOJI = {
     "opening": "🔓",
@@ -191,12 +337,31 @@ async def submit(
     init_data: str = Form(...),
     filial_id: int = Form(...),
     checklist_type_id: int = Form(...),
-    items_meta: str = Form(...),  # JSON: [{"section_id": 1, "field": "photo_1", "comment": "..."}]
-    files: List[UploadFile] = File(...),
     lang: str = Form("uz"),
 ):
+    """E'TIBOR: rasmlar bu so'rovda YUKLANMAYDI. Ular xodim rasm olgan
+    zahoti /api/draft/photo orqali allaqachon serverga saqlangan bo'ladi
+    — bu yerda faqat o'sha qoralamadagi rasmlarni Telegram guruhiga
+    jo'natish sodir bo'ladi. Shu tufayli bu so'rov juda yengil (fayl
+    yo'q, faqat bir nechta ID/matn) va sekin yoki beqaror internetda
+    ham muvaffaqiyatli yetib borish ehtimoli ancha yuqori — avval
+    xodim BARCHA rasmlarni bitta og'ir so'rovda qayta yuklashi kerak
+    edi, shu sabab ko'p rasmli/sekin internetli holatlarda so'rov
+    uzilib qolib, "xatolik" chiqib, faqat botni qayta ishga tushirgach
+    ishlashi mumkin edi."""
     lang = _norm_lang(lang)
     user = await _check_auth(init_data)
+
+    draft = await db.get_draft(user["id"])
+    if not draft or draft["filial_id"] != filial_id or draft["checklist_type_id"] != checklist_type_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Qoralama topilmadi yoki eskirgan. Sahifani yangilab, qaytadan urinib ko'ring.",
+        )
+
+    draft_photos = await db.list_draft_photos(user["id"])
+    if not draft_photos:
+        raise HTTPException(status_code=400, detail="Hech qanday rasm topilmadi")
 
     filial = await db.get_filial(filial_id)
     if not filial:
@@ -210,19 +375,11 @@ async def submit(
     if not checklist_type:
         raise HTTPException(status_code=404, detail="Chek-list turi topilmadi")
 
-    try:
-        meta = json.loads(items_meta)
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=400, detail="items_meta JSON emas")
-
-    if len(meta) != len(files):
-        raise HTTPException(status_code=400, detail="Rasmlar soni mos emas")
-
     # Xavfsizlik: agar foydalanuvchida ESKIRGAN/keshlangan bo'limlar
     # ro'yxati bo'lsa (masalan sahifani yangilamagan bo'lsa), shu filial
     # uchun keyinchalik "yashirilgan" deb belgilangan bo'limga rasm
     # yuborilmasin — bunday bo'lim topilsa so'rov butunlay rad etiladi.
-    checked_section_ids = {item["section_id"] for item in meta}
+    checked_section_ids = {p["section_id"] for p in draft_photos}
     for section_id in checked_section_ids:
         if await db.is_section_hidden_for_filial(section_id, filial_id):
             raise HTTPException(
@@ -274,12 +431,11 @@ async def submit(
     # bo'limga tegishli barcha rasmlar Telegramga BITTA albom (media group)
     # sifatida yuboriladi, har biri alohida xabar bo'lib ketmaydi.
     # dict Python 3.7+ da qo'shilish tartibini saqlaydi, shuning uchun
-    # bo'limlar frontendda ko'rsatilgan tartibda yuboriladi.
-    section_groups: dict[int, dict] = {}
-    for item, upload in zip(meta, files):
-        section_id = item["section_id"]
-        group = section_groups.setdefault(section_id, {"items": []})
-        group["items"].append((item, upload))
+    # bo'limlar frontendda ko'rsatilgan tartibda yuboriladi (draft_photos
+    # id bo'yicha, ya'ni olingan tartibda, saralangan).
+    section_groups: dict[int, list] = {}
+    for p in draft_photos:
+        section_groups.setdefault(p["section_id"], []).append(p)
 
     # Bo'lim nomlarini FRONTENDDAN kelgan matnga ishonib emas, bazadan
     # TANLANGAN TILDA (lang) qayta o'qib olamiz — shunda Telegram
@@ -290,13 +446,12 @@ async def submit(
         sec = await db.get_section(section_id, lang)
         section_names[section_id] = sec["name"] if sec else ""
 
-    for section_id, group in section_groups.items():
+    for section_id, photos_meta in section_groups.items():
         section_name = section_names.get(section_id, "")
-        items = group["items"]
 
         # Bo'lim uchun izoh — barcha rasmlar bitta umumiy izohni ishlatadi
         # (frontend shunday yuboradi), shuning uchun birinchisidan olamiz.
-        comment = (items[0][0].get("comment") or "").strip()
+        comment = (photos_meta[0].get("comment") or "").strip()
 
         caption = (
             f"🏢 <b>{filial['name']}</b>\n"
@@ -308,9 +463,17 @@ async def submit(
         if comment:
             caption += f"\n💬 {comment}"
 
+        # Rasm baytlarini shu paytda (yuborish arafasida) bazadan o'qiymiz —
+        # ular allaqachon /api/draft/photo orqali saqlangan.
         photo_payload = []
-        for item, upload in items:
-            photo_payload.append((await upload.read(), upload.filename or "photo.jpg"))
+        for p in photos_meta:
+            full_photo = await db.get_draft_photo(p["id"], user["id"])
+            if not full_photo:
+                continue
+            photo_payload.append((full_photo["photo_data"], full_photo["filename"] or "photo.jpg"))
+
+        if not photo_payload:
+            continue
 
         if len(photo_payload) == 1:
             sent_list = [await tg.send_photo_to_topic(
@@ -326,8 +489,8 @@ async def submit(
                 caption=caption,
             )
 
-        for (item, _upload), sent in zip(items, sent_list):
-            item_comment = (item.get("comment") or "").strip()
+        for p, sent in zip(photos_meta, sent_list):
+            item_comment = (p.get("comment") or "").strip()
             await db.add_submission_photo(
                 submission_id=submission_id,
                 section_id=section_id,
@@ -335,6 +498,17 @@ async def submit(
                 comment=item_comment or None,
                 sent_message_id=sent["message_id"],
             )
+
+        # Shu bo'lim MUVAFFAQIYATLI yuborilgach, uni qoralamadan darhol
+        # o'chiramiz. Shu tufayli agar keyingi bo'limni yuborishda xatolik
+        # yuz berib, xodim qayta "Yuborish"ni bosishga majbur bo'lsa —
+        # allaqachon yuborilgan bo'limlar QAYTA yuborilmaydi (dublikat
+        # bo'lmaydi), faqat qolganlari qayta urinilardi.
+        for p in photos_meta:
+            await db.delete_draft_photo(p["id"], user["id"])
+
+    # Hammasi muvaffaqiyatli yuborilgach — qoralama endi kerak emas.
+    await db.clear_draft(user["id"])
 
     return {"ok": True, "submission_id": submission_id}
 

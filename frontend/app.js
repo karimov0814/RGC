@@ -11,6 +11,40 @@ tg.expand();
 const initData = tg.initData; // backendga validatsiya uchun yuboriladi
 
 // ============================================================
+//  Tarmoqdagi vaqtinchalik uzilishlarga chidamli fetch.
+//
+//  Avval: internet bir lahzaga uzilib qolsa (mobil tarmoqda odatiy hol)
+//  yoki so'rov birinchi urinishda vaqt tugashi bilan tugasa, foydalanuvchi
+//  darhol "xatolik" ko'rar va faqat botni qayta ishga tushirgach (ya'ni
+//  ilova qaytadan yuklangach) qayta urinib ko'rish imkoni bo'lardi.
+//  Endi shu darajadagi vaqtinchalik xatoliklar sezilmasdan avtomatik
+//  qayta uriniladi.
+// ============================================================
+async function fetchWithRetry(url, options = {}, retries = 2, backoffMs = 900) {
+  let lastErr;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(url, options);
+      // 5xx — server tomonidagi vaqtinchalik muammo bo'lishi mumkin, qayta urinamiz.
+      if (res.status >= 500 && attempt < retries) {
+        lastErr = new Error(`HTTP ${res.status}`);
+        await new Promise((r) => setTimeout(r, backoffMs * (attempt + 1)));
+        continue;
+      }
+      return res;
+    } catch (err) {
+      // Tarmoq xatosi (masalan uzilib qolgan ulanish) — qayta urinamiz.
+      lastErr = err;
+      if (attempt < retries) {
+        await new Promise((r) => setTimeout(r, backoffMs * (attempt + 1)));
+        continue;
+      }
+    }
+  }
+  throw lastErr;
+}
+
+// ============================================================
 //  Chiziqli (line) ikonkalar — minimalist dizayn uchun yagona
 //  manba. Barcha ikonkalar bir xil stroke-width bilan chiziladi.
 // ============================================================
@@ -67,8 +101,122 @@ const state = {
   checklistTypes: [],     // [{id, key, name}]
   checklistType: null,    // {id, key, name}
   sections: [],            // [{id, name}]
-  photos: {},               // section_id -> [{file, previewUrl, comment}, ...]
+  // section_id -> [{id (draft_photos.id, serverda saqlangan bo'lsa),
+  //                 file (mahalliy File, hali yuklanmagan bo'lsa),
+  //                 previewUrl, comment, uploading (bool)}, ...]
+  photos: {},
 };
+
+// ============================================================
+//  QORALAMA (draft) — serverga darhol saqlash.
+//
+//  Avval: rasm/izoh/tanlovlar FAQAT shu JS state ob'ektida turardi.
+//  Xodim botdan chiqib ketsa (yoki Telegram ilovani fonda "tozalab
+//  qo'ysa") — bu ob'ekt butunlay yo'qolib, hamma narsani qaytadan
+//  boshlashga to'g'ri kelardi.
+//
+//  Endi: har bir rasm OLINGAN ZAHOTI backendga yuboriladi va u yerda
+//  saqlanadi (faqat shu xodimga tegishli). Ilova qayta ochilganda
+//  saqlangan qoralama avtomatik tiklanadi (restoreDraftIfAny()).
+// ============================================================
+async function saveDraftMeta(filialId, checklistTypeId) {
+  try {
+    const fd = new FormData();
+    fd.append("init_data", initData);
+    if (filialId != null) fd.append("filial_id", filialId);
+    if (checklistTypeId != null) fd.append("checklist_type_id", checklistTypeId);
+    fd.append("lang", getLang());
+    await fetchWithRetry(`${API_BASE}/api/draft/meta`, { method: "PUT", body: fd });
+  } catch (_) {
+    // Jim ichida muvaffaqiyatsiz bo'lsa ham ilova ishlashda davom etadi —
+    // rasm yuklanganda draft baribir avtomatik yaratiladi.
+  }
+}
+
+async function uploadDraftPhoto(sectionId, comment, file) {
+  const fd = new FormData();
+  fd.append("init_data", initData);
+  fd.append("section_id", sectionId);
+  fd.append("comment", comment || "");
+  fd.append("file", file, file.name || "photo.jpg");
+  const res = await fetchWithRetry(`${API_BASE}/api/draft/photo`, { method: "POST", body: fd });
+  if (!res.ok) throw new Error(await res.text());
+  const data = await res.json();
+  return data.photo; // {id, section_id, comment, image_url}
+}
+
+async function updateDraftPhotoComment(photoId, comment) {
+  try {
+    const fd = new FormData();
+    fd.append("init_data", initData);
+    fd.append("comment", comment || "");
+    await fetchWithRetry(`${API_BASE}/api/draft/photo/${photoId}`, { method: "PUT", body: fd });
+  } catch (_) {}
+}
+
+async function deleteDraftPhoto(photoId) {
+  try {
+    await fetchWithRetry(
+      `${API_BASE}/api/draft/photo/${photoId}?init_data=${encodeURIComponent(initData)}`,
+      { method: "DELETE" }
+    );
+  } catch (_) {}
+}
+
+// Ilova ochilganda avvalgi (hali yuborilmagan) qoralama bor-yo'qligini
+// tekshiradi. Bo'lsa — filial/chek-list turi/bo'limlar/rasmlarni xuddi
+// avvalgidek tiklab, to'g'ridan-to'g'ri bo'limlar ekraniga olib o'tadi.
+// Faqat SHU xodimning o'z qoralamasi qaytariladi (backend telegram_user_id
+// bo'yicha filtrlaydi) — boshqa hech kim buni ko'ra olmaydi.
+async function restoreDraftIfAny() {
+  try {
+    const res = await fetch(`${API_BASE}/api/draft?init_data=${encodeURIComponent(initData)}&lang=${getLang()}`);
+    if (!res.ok) return false;
+    const data = await res.json();
+    const draft = data.draft;
+    if (!draft || !draft.filial_id || !draft.checklist_type_id) return false;
+
+    const filial = (state.filials || []).find((f) => f.id === draft.filial_id);
+    if (!filial) return false;
+
+    showLoading(t("loading_default"));
+
+    const secRes = await fetch(
+      `${API_BASE}/api/sections?init_data=${encodeURIComponent(initData)}&checklist_type_id=${draft.checklist_type_id}&filial_id=${filial.id}&lang=${getLang()}`
+    );
+    if (!secRes.ok) {
+      hideLoading();
+      return false;
+    }
+    const secData = await secRes.json();
+
+    state.filial = filial;
+    state.checklistType = secData.checklist_type;
+    state.sections = secData.sections;
+    state.photos = {};
+
+    (data.photos || []).forEach((p) => {
+      if (!state.photos[p.section_id]) state.photos[p.section_id] = [];
+      state.photos[p.section_id].push({
+        id: p.id,
+        previewUrl: `${API_BASE}${p.image_url}`,
+        comment: p.comment || "",
+      });
+    });
+
+    document.getElementById("filial-name-title").textContent = state.filial.name;
+    document.getElementById("checklist-name-subtitle").textContent =
+      `${CHECKLIST_TYPE_EMOJI[state.checklistType.key] || "📋"} ${state.checklistType.name}`;
+
+    hideLoading();
+    renderSections();
+    showScreen("screen-sections");
+    return true;
+  } catch (_) {
+    hideLoading();
+    return false;
+  }
+}
 
 // ---------- Ekranlarni almashtirish ----------
 function showScreen(id) {
@@ -241,7 +389,10 @@ async function loadFilials() {
       loadAdminFilials();
       initAdminSections();
     } else {
-      showScreen("screen-filial");
+      // Xodimning yubormasdan qoldirgan qoralamasi bo'lsa — shu joydan
+      // davom ettiramiz, bo'lmasa oddiy filial tanlash ekrani ko'rsatiladi.
+      const resumed = await restoreDraftIfAny();
+      if (!resumed) showScreen("screen-filial");
     }
   } catch (e) {
     hideLoading();
@@ -335,6 +486,11 @@ async function selectChecklistType(checklistType) {
     hideLoading();
     renderSections();
     showScreen("screen-sections");
+
+    // Tanlov saqlanadi — shu tufayli botdan chiqib ketilsa/ilova yopilsa
+    // ham, qaytib kirganda aynan shu filial+chek-list turi bilan davom
+    // etadi (rasm olishni boshlashdan oldin ham).
+    saveDraftMeta(state.filial.id, checklistType.id);
   } catch (e) {
     hideLoading();
     await showAlert(t("error_load_sections"));
@@ -538,23 +694,47 @@ document.addEventListener("visibilitychange", () => {
 });
 
 // Ikkala inputdan (galereya) va getUserMedia'dan (kamera) kelgan
-// fayllarni bitta joyda qayta ishlash.
-function handlePickedFiles(fileList) {
+// fayllarni bitta joyda qayta ishlash. Har bir rasm DARHOL serverga
+// yuklanadi (draft sifatida saqlanadi) — shu tufayli xodim shu yerdan
+// chiqib ketsa ham rasm yo'qolmaydi, va "Yuborish" bosilganda uni
+// qayta yuklash shart bo'lmaydi.
+async function handlePickedFiles(fileList) {
   const files = Array.from(fileList || []);
   if (!files.length || activeSectionId === null) return;
 
-  const existingComment = state.photos[activeSectionId][0]?.comment || "";
-  files.forEach((file) => {
-    state.photos[activeSectionId].push({
+  const sectionId = activeSectionId;
+  const existingComment = state.photos[sectionId][0]?.comment || "";
+
+  for (const file of files) {
+    // Foydalanuvchiga darhol (yuklanishi tugashini kutmasdan) lokal
+    // preview ko'rsatamiz — ilova "qotib qolganday" tuyulmasin.
+    const entry = {
+      id: null,
       file,
       previewUrl: URL.createObjectURL(file),
       comment: existingComment,
-    });
-  });
+      uploading: true,
+    };
+    state.photos[sectionId].push(entry);
+    renderSectionCard(sectionId);
+    updateProgress();
+    attachMainButton();
 
-  renderSectionCard(activeSectionId);
-  updateProgress();
-  attachMainButton();
+    try {
+      const photo = await uploadDraftPhoto(sectionId, existingComment, file);
+      entry.id = photo.id;
+      entry.uploading = false;
+    } catch (err) {
+      // Yuklash muvaffaqiyatsiz bo'lsa — shu rasmni ro'yxatdan olib
+      // tashlaymiz va xodimga xabar beramiz (qayta urinib ko'rishi mumkin).
+      const idx = state.photos[sectionId].indexOf(entry);
+      if (idx !== -1) state.photos[sectionId].splice(idx, 1);
+      await showAlert(t("error_submit"));
+    }
+    renderSectionCard(sectionId);
+    updateProgress();
+    attachMainButton();
+  }
 }
 
 function renderSections() {
@@ -587,9 +767,9 @@ function renderSectionCard(sectionId) {
   const thumbsHtml = photos
     .map(
       (p, idx) => `
-      <div class="photo-thumb-wrap">
+      <div class="photo-thumb-wrap${p.uploading ? " uploading" : ""}">
         <img class="photo-preview" src="${p.previewUrl}" />
-        <button class="remove-photo-btn" data-section-id="${sectionId}" data-idx="${idx}">${iconMarkup("close")}</button>
+        <button class="remove-photo-btn" data-section-id="${sectionId}" data-idx="${idx}" ${p.uploading ? "disabled" : ""}>${iconMarkup("close")}</button>
       </div>`
     )
     .join("");
@@ -619,7 +799,8 @@ function renderSectionCard(sectionId) {
   card.querySelectorAll(".remove-photo-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       const idx = parseInt(btn.dataset.idx, 10);
-      state.photos[sectionId].splice(idx, 1);
+      const [removed] = state.photos[sectionId].splice(idx, 1);
+      if (removed && removed.id) deleteDraftPhoto(removed.id);
       renderSectionCard(sectionId);
       updateProgress();
       attachMainButton();
@@ -631,6 +812,13 @@ function renderSectionCard(sectionId) {
     commentEl.addEventListener("input", (e) => {
       // Izoh butun bo'lim uchun umumiy (barcha rasmlarga bitta caption qo'shiladi)
       state.photos[sectionId].forEach((p) => (p.comment = e.target.value));
+    });
+    // Serverga esa faqat yozishni TUGATGANDA (blur) yuboramiz — har bir
+    // harf uchun alohida so'rov yubormaslik uchun.
+    commentEl.addEventListener("blur", (e) => {
+      state.photos[sectionId]
+        .filter((p) => p.id)
+        .forEach((p) => updateDraftPhotoComment(p.id, e.target.value));
     });
   }
 }
@@ -674,24 +862,23 @@ async function submitReport() {
   tg.MainButton.showProgress();
 
   try {
+    // E'TIBOR: rasmlar bu yerda YUKLANMAYDI — ular xodim rasm olgan
+    // zahoti /api/draft/photo orqali allaqachon serverga saqlangan.
+    // Shu tufayli bu so'rov juda yengil (faqat matn) va sekin/beqaror
+    // internetda ham muvaffaqiyatli yetib borish ehtimoli ancha yuqori.
+    // Agar baribir uzilib qolsa (fetchWithRetry avtomatik 2 marta qayta
+    // uradi) — qoralama serverda saqlanib qoladi, xodim shunchaki qayta
+    // "Yuborish"ni bosishi kifoya, hech narsa qaytadan yuklanmaydi.
     const formData = new FormData();
     formData.append("init_data", initData);
     formData.append("filial_id", state.filial.id);
     formData.append("checklist_type_id", state.checklistType.id);
     formData.append("lang", getLang());
 
-    const meta = [];
-    state.sections.forEach((sec) => {
-      const photos = state.photos[sec.id] || [];
-      photos.forEach((p) => {
-        meta.push({ section_id: sec.id, section_name: sec.name, comment: p.comment });
-        formData.append("files", p.file, `section_${sec.id}_${Date.now()}_${Math.random().toString(36).slice(2)}.jpg`);
-      });
-    });
-    formData.append("items_meta", JSON.stringify(meta));
-
-    const res = await fetch(`${API_BASE}/api/submit`, { method: "POST", body: formData });
+    const res = await fetchWithRetry(`${API_BASE}/api/submit`, { method: "POST", body: formData }, 2, 1200);
     if (!res.ok) throw new Error(await res.text());
+
+    state.photos = {};
 
     hideLoading();
     tg.MainButton.hideProgress();
@@ -702,6 +889,8 @@ async function submitReport() {
     hideLoading();
     tg.MainButton.hideProgress();
     tg.HapticFeedback.notificationOccurred("error");
+    // Rasmlar serverda xavfsiz saqlanib qolgani uchun, xodim shunchaki
+    // "Yuborish"ni qayta bosishi mumkin — hech narsa qaytadan olinmaydi.
     await showAlert(t("error_submit"));
   }
 }

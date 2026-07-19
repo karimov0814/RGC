@@ -453,3 +453,47 @@ WITH ranked AS (
 UPDATE sections s SET sort_order = ranked.rn
 FROM ranked
 WHERE s.id = ranked.id AND s.sort_order <> ranked.rn;
+
+-- ============================================================
+--  QORALAMA (DRAFT) — hisobot yuborilib bo'lmagan yoki hali
+--  yakunlanmagan holatda saqlanadi.
+--
+--  Muammo: oldin rasm/izoh/tanlovlar FAQAT mini app'ning JS xotirasida
+--  turardi. Xodim botdan chiqib ketsa (yoki ilova fonga o'tib qayta
+--  yuklansa) — hammasi yo'qolib, qaytadan boshlashga to'g'ri kelardi.
+--  Shuningdek "Yuborish" bosilganda BARCHA rasmlar bitta katta so'rovda
+--  yuborilgani uchun (ko'p rasm + sekin internet) so'rov ba'zan uzilib
+--  qolar, xodim qayta urinishga majbur bo'lardi va bu paytda hammasini
+--  qaytadan yuklashi kerak edi.
+--
+--  Yechim: har bir rasm OLINGAN ZAHOTI (bo'lim tanlangach) darhol
+--  serverga (shu jadvalga) yuboriladi — "Yuborish" tugmasi endi faqat
+--  Telegram guruhiga jo'natishni boshlaydi, qayta yuklash shart emas.
+--  Har bir foydalanuvchining FAQAT BITTA joriy qoralamasi bo'ladi
+--  (telegram_user_id UNIQUE) va u faqat shu foydalanuvchiga tegishli —
+--  boshqa xodim uni ko'ra olmaydi. Muvaffaqiyatli yuborilgach qoralama
+--  o'chiriladi; yubormasdan chiqib ketilsa — saqlanib qoladi, xodim
+--  qaytib kirganda xuddi shu joyidan davom ettira oladi.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS drafts (
+    id                  SERIAL PRIMARY KEY,
+    telegram_user_id    BIGINT NOT NULL UNIQUE,
+    filial_id           INTEGER REFERENCES filials(id) ON DELETE SET NULL,
+    checklist_type_id   INTEGER REFERENCES checklist_types(id) ON DELETE SET NULL,
+    lang                TEXT NOT NULL DEFAULT 'uz',
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS draft_photos (
+    id            SERIAL PRIMARY KEY,
+    draft_id      INTEGER NOT NULL REFERENCES drafts(id) ON DELETE CASCADE,
+    section_id    INTEGER NOT NULL,
+    comment       TEXT,
+    filename      TEXT,
+    content_type  TEXT,
+    photo_data    BYTEA NOT NULL,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_draft_photos_draft_id ON draft_photos(draft_id);
