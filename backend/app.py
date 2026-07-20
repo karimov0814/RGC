@@ -591,13 +591,23 @@ async def submit(
         # yuz berib, xodim qayta "Yuborish"ni bosishga majbur bo'lsa —
         # allaqachon yuborilgan bo'limlar QAYTA yuborilmaydi (dublikat
         # bo'lmaydi), faqat qolganlari qayta urinilardi.
-        # Shu bilan birga, endi kerak bo'lmay qolgan zaxira nusxasini
-        # xodimning shaxsiy chatidan ham o'chirib tashlaymiz (chatni
-        # tartibsiz to'ldirib yubormasligi uchun).
+        #
+        # MUHIM TUZATISH: xodimning shaxsiy chatidagi zaxira xabarini
+        # o'chirish endi javobni KUTIB TURMAYDI (fon vazifasi sifatida
+        # ishga tushiriladi). Bo'limlar ko'p bo'lgan hisobotlarda bu
+        # tozalash (har bir rasm uchun alohida Telegram so'rovi) javobni
+        # o'nlab soniyaga kechiktirib, "Yuborish" so'rovining o'zi
+        # tarmoq darajasida uzilib qolishiga (mobil qurilmalarda "Load
+        # failed" xatosi) sabab bo'lishi mumkin edi. Bu — shunchaki
+        # "iloji bo'lsa tozalash" (xatoligi allaqachon e'tiborga
+        # olinmaydi), shuning uchun uni orqa fonda, javobga to'sqinlik
+        # qilmasdan bajarish butunlay xavfsiz.
         for p in photos_meta:
             deleted = await db.delete_draft_photo(p["id"], user["id"])
             if deleted and deleted.get("telegram_message_id"):
-                await tg.delete_message(deleted["telegram_user_id"], deleted["telegram_message_id"])
+                asyncio.create_task(
+                    tg.delete_message(deleted["telegram_user_id"], deleted["telegram_message_id"])
+                )
 
     # Hammasi muvaffaqiyatli yuborilgach — qoralama endi kerak emas.
     await db.clear_draft(user["id"])
