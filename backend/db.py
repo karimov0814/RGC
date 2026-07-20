@@ -33,7 +33,10 @@ def _localized_name(row: dict, lang: str) -> str:
 async def get_pool() -> asyncpg.Pool:
     global _pool
     if _pool is None:
-        _pool = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=10)
+        # max_size=25: 20+ xodim bir vaqtda foydalansa ham (masalan
+        # hammasi bir vaqtda rasm yuklasa) bazaga ulanish navbatida
+        # qolib ketishning oldini olish uchun yetarli zaxira bilan.
+        _pool = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=25)
     return _pool
 
 

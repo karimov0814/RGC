@@ -170,7 +170,7 @@ async function deleteDraftPhoto(photoId) {
 // bo'yicha filtrlaydi) — boshqa hech kim buni ko'ra olmaydi.
 async function restoreDraftIfAny() {
   try {
-    const res = await fetch(`${API_BASE}/api/draft?init_data=${encodeURIComponent(initData)}&lang=${getLang()}`);
+    const res = await fetchWithRetry(`${API_BASE}/api/draft?init_data=${encodeURIComponent(initData)}&lang=${getLang()}`);
     if (!res.ok) return false;
     const data = await res.json();
     const draft = data.draft;
@@ -181,7 +181,7 @@ async function restoreDraftIfAny() {
 
     showLoading(t("loading_default"));
 
-    const secRes = await fetch(
+    const secRes = await fetchWithRetry(
       `${API_BASE}/api/sections?init_data=${encodeURIComponent(initData)}&checklist_type_id=${draft.checklist_type_id}&filial_id=${filial.id}&lang=${getLang()}`
     );
     if (!secRes.ok) {
@@ -212,7 +212,8 @@ async function restoreDraftIfAny() {
     renderSections();
     showScreen("screen-sections");
     return true;
-  } catch (_) {
+  } catch (e) {
+    console.error("[restoreDraftIfAny] tiklashda xatolik:", e);
     hideLoading();
     return false;
   }
@@ -751,6 +752,48 @@ document.addEventListener("visibilitychange", () => {
 // yuklanadi (draft sifatida saqlanadi) — shu tufayli xodim shu yerdan
 // chiqib ketsa ham rasm yo'qolmaydi, va "Yuborish" bosilganda uni
 // qayta yuklash shart bo'lmaydi.
+// ============================================================
+//  Rasmni yuklashdan OLDIN brauzerning o'zida siqish.
+//
+//  Muammo: Android'da kamera orqali olingan rasmlar odatda TO'LIQ
+//  o'lchamda (ko'pincha 8-15 MB, ba'zan undan ham katta) qaytadi —
+//  iPhone'da esa brauzer buni odatda avtomatik siqib yuboradi. Bunday
+//  katta fayllar Telegram'ning rasm yuborish chegarasidan (10 MB)
+//  oshib ketishi, yoki sekin mobil internetda so'rovni "uzilib
+//  qolishga" yaqinlashtirishi mumkin edi — bu, ehtimol, "Yuborish"da
+//  Android'ga xos xatolikning sababi edi.
+//
+//  Yechim: rasm serverga yuborilishidan oldin, shu yerning o'zida
+//  (Canvas orqali) maksimal 1600px tomonga va sifatli, lekin ancha
+//  yengilroq JPEG'ga siqiladi. Agar biror sabab bilan siqish
+//  muvaffaqiyatsiz bo'lsa, asl fayl o'zgarishsiz yuboriladi (funksiya
+//  hech qachon xato bermaydi).
+// ============================================================
+async function compressImageForUpload(file, maxDimension = 1600, quality = 0.82) {
+  if (!file || !file.type || !file.type.startsWith("image/")) return file;
+  try {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, maxDimension / Math.max(bitmap.width, bitmap.height));
+    // Fayl allaqachon kichik va sifat pasaytirishning ma'nosi yo'q bo'lsa — tegmaymiz.
+    if (scale >= 1 && file.size <= 1.5 * 1024 * 1024) return file;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
+    if (!blob) return file;
+    // Siqilgan natija asl fayldan KATTA chiqib qolsa (kamdan-kam, lekin
+    // mumkin) — asl faylni ishlatamiz.
+    if (blob.size >= file.size) return file;
+    return new File([blob], (file.name || "photo").replace(/\.\w+$/, "") + ".jpg", { type: "image/jpeg" });
+  } catch (_) {
+    return file; // Canvas/createImageBitmap qo'llab-quvvatlanmasa — asl faylni yuboramiz
+  }
+}
+
 async function handlePickedFiles(fileList) {
   const files = Array.from(fileList || []);
   if (!files.length || activeSectionId === null) return;
@@ -758,7 +801,8 @@ async function handlePickedFiles(fileList) {
   const sectionId = activeSectionId;
   const existingComment = state.photos[sectionId][0]?.comment || "";
 
-  for (const file of files) {
+  for (const rawFile of files) {
+    const file = await compressImageForUpload(rawFile);
     // Foydalanuvchiga darhol (yuklanishi tugashini kutmasdan) lokal
     // preview ko'rsatamiz — ilova "qotib qolganday" tuyulmasin.
     const entry = {
@@ -780,6 +824,7 @@ async function handlePickedFiles(fileList) {
     } catch (err) {
       // Yuklash muvaffaqiyatsiz bo'lsa — shu rasmni ro'yxatdan olib
       // tashlaymiz va xodimga xabar beramiz (qayta urinib ko'rishi mumkin).
+      console.error("[handlePickedFiles] rasm yuklashda xatolik:", err);
       const idx = state.photos[sectionId].indexOf(entry);
       if (idx !== -1) state.photos[sectionId].splice(idx, 1);
       await showAlert(t("error_submit"));
@@ -939,6 +984,7 @@ async function submitReport() {
     showScreen("screen-success");
     tg.HapticFeedback.notificationOccurred("success");
   } catch (e) {
+    console.error("[submitReport] yuborishda xatolik:", e);
     hideLoading();
     tg.MainButton.hideProgress();
     tg.HapticFeedback.notificationOccurred("error");
