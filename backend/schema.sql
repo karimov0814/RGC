@@ -81,38 +81,62 @@ DROP TABLE IF EXISTS user_contacts;
 
 -- ============================================================
 --  Bo'limlar: takroriy nomlarni bir martalik tozalash + UNIQUE indeks
---  (bu qism har safar xavfsiz qayta ishlashi mumkin — faqat takrorlarni
---  birlashtiradi, mavjud is_active holatini o'zgartirmaydi)
+--
+--  MUHIM TUZATISH: bu blok ilgari "har safar xavfsiz qayta ishlashi
+--  mumkin" deb yozilgan va HAR safar backend qayta ishga tushganda
+--  (Railway restart/deploy) ishlar edi. U bo'lim nomini (`name`) BUTUN
+--  BAZADA GLOBAL solishtiradi — bu 3 ta smena (checklist_type_id)
+--  tushunchasi kiritilishidan OLDIN yozilgan, shu sabab turli smenalarga
+--  tegishli bo'limlarni ajratmaydi.
+--
+--  Bug: agar bitta xil nomli bo'lim ikkita TURLI smenaga qo'shilsa
+--  (masalan "Omborxona fotosi" ham "Ochilish"ga, ham "Topshirilish"ga),
+--  bu ikkovi bazada "bir xil nomli dublikat" bo'lib ko'rinardi. Keyingi
+--  backend restart'ida shu blok ularni "dublikat"ni tozalash deb,
+--  eng eskisidan tashqari BARCHASINI O'CHIRIB TASHLAR EDI — shu sabab
+--  yangi qo'shilgan bo'lim bir necha kundan keyin (keyingi deploy'da)
+--  "yo'qolib qolardi". Endi boshqa seed-bloklar kabi FAQAT BIR MARTA
+--  ishlaydigan qilib qulflandi — shu bilan endi hech qachon qayta
+--  ishlamaydi va kelajakda qo'shiladigan (turli smenalarda bir xil
+--  nomli) bo'limlarga tegmaydi.
 -- ============================================================
 
 -- 1) Avval `name` ustida UNIQUE cheklov bo'lmagani uchun, oldingi
 --    deploylarda bir xil nomli takroriy qatorlar paydo bo'lgan bo'lishi
 --    mumkin. Har bir nom uchun eng kichik id qoldiriladi, takroriy
 --    qatorlarga bog'langan rasmlar (agar bo'lsa) shu idga ko'chiriladi.
-WITH ranked AS (
-    SELECT id, name,
-           ROW_NUMBER() OVER (PARTITION BY name ORDER BY id) AS rn,
-           FIRST_VALUE(id) OVER (PARTITION BY name ORDER BY id) AS keep_id
-    FROM sections
-),
-to_merge AS (
-    SELECT id, keep_id FROM ranked WHERE rn > 1
-)
-UPDATE submission_photos sp
-SET section_id = tm.keep_id
-FROM to_merge tm
-WHERE sp.section_id = tm.id;
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM schema_migrations WHERE id = 'dedupe_section_names_v1') THEN
+        WITH ranked AS (
+            SELECT id, name,
+                   ROW_NUMBER() OVER (PARTITION BY name ORDER BY id) AS rn,
+                   FIRST_VALUE(id) OVER (PARTITION BY name ORDER BY id) AS keep_id
+            FROM sections
+        ),
+        to_merge AS (
+            SELECT id, keep_id FROM ranked WHERE rn > 1
+        )
+        UPDATE submission_photos sp
+        SET section_id = tm.keep_id
+        FROM to_merge tm
+        WHERE sp.section_id = tm.id;
 
-DELETE FROM sections s
-USING (
-    SELECT id, ROW_NUMBER() OVER (PARTITION BY name ORDER BY id) AS rn
-    FROM sections
-) ranked
-WHERE s.id = ranked.id AND ranked.rn > 1;
+        DELETE FROM sections s
+        USING (
+            SELECT id, ROW_NUMBER() OVER (PARTITION BY name ORDER BY id) AS rn
+            FROM sections
+        ) ranked
+        WHERE s.id = ranked.id AND ranked.rn > 1;
 
--- 2) Endi nomlar noyob bo'lishini doimiy ta'minlaymiz (kelajakda ham
---    takroriy qator qo'shilmasligi uchun)
-CREATE UNIQUE INDEX IF NOT EXISTS sections_name_unique ON sections(name);
+        INSERT INTO schema_migrations (id) VALUES ('dedupe_section_names_v1');
+    END IF;
+END $$;
+
+-- 2) Bu UNIQUE indeks ham xuddi shu eski (checklist_type_id'siz) davrga
+--    tegishli edi va keyinroq (pastda) olib tashlanadi/almashtiriladi —
+--    shu yerda uni endi umuman yaratmaymiz, chunki turli smenalarda bir
+--    xil nomli bo'lim bo'lishi TABIIY va TO'G'RI holat.
 
 -- ============================================================
 --  Bo'limlarni boshlang'ich 8 ta ro'yxat bilan to'ldirish
